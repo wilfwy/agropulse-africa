@@ -1,0 +1,16 @@
+fastapi==0.110.*
+uvicorn[standard]
+sqlalchemy==2.0.*
+alembic
+pydantic==2.*
+pydantic-settings
+psycopg2-binary
+redis
+celery[redis]
+pyjwt
+cryptography
+python-multipart
+httpx
+prophet
+scikit-learn
+spacy
