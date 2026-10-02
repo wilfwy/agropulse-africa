@@ -171,6 +171,16 @@ def payment_init(payload: dict):
 def convert(price: float, unit: str = "kg"):
     from app.services.pricing import to_kg
     return {"price_kg": to_kg(price, unit), "currency": "XOF"}
+from fastapi.responses import PlainTextResponse
+import os
+
+@app.get("/api/v1/webhooks/whatsapp", response_class=PlainTextResponse)
+def whatsapp_verify(hub_mode: str = "", hub_verify_token: str = "", hub_challenge: str = ""):
+    verify = os.getenv("WHATSAPP_VERIFY_TOKEN", "agropulse-dev")
+    if hub_mode == "subscribe" and hub_verify_token == verify and hub_challenge:
+        return hub_challenge
+    raise HTTPException(403, "Verification WhatsApp echouee")
+
 @app.post("/api/v1/webhooks/whatsapp")
 def whatsapp_in(payload: dict):
     # NLP mock : PRIX MAIS KARA
