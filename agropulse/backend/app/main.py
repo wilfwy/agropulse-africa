@@ -56,6 +56,7 @@ class AlertIn(BaseModel):
     alert_type: str = "price_above"
     threshold_value: Optional[float] = None
     channel: str = "whatsapp"
+    phone: Optional[str] = None  # rattache l'alerte a l'utilisateur (defaut: compte demo)
 
 def _db_prices(product: Optional[str] = None):
     """Prix depuis PostgreSQL (price_records approved). Leve une exception si BDD vide."""
@@ -178,17 +179,163 @@ def products():
 def regions(country: str = "TGO"):
     return {"data": [{"id": "plateaux", "name_fr": "Plateaux"}, {"id": "kara", "name_fr": "Kara"}, {"id": "maritime", "name_fr": "Maritime"}]}
 
+def _resolve_product(db, ref):
+    from app.models import all as M
+    try:
+        import uuid as _uuid
+        pid = _uuid.UUID(str(ref))
+        p = db.query(M.Product).filter(M.Product.id == pid).first()
+        if p:
+            return p
+    except Exception:
+        pass
+    return db.query(M.Product).filter(M.Product.code == str(ref).upper()).first()
+
+def _resolve_market(db, ref):
+    if not ref:
+        return None
+    from app.models import all as M
+    try:
+        import uuid as _uuid
+        mid = _uuid.UUID(str(ref))
+        m = db.query(M.Market).filter(M.Market.id == mid).first()
+        if m:
+            return m
+    except Exception:
+        pass
+    return db.query(M.Market).filter(M.Market.name_fr.ilike(f"%{ref}%")).first()
+
+def _demo_user(db, phone: Optional[str] = None):
+    from app.models import all as M
+    phone = phone or "+22800000000"
+    u = db.query(M.User).filter(M.User.phone == phone).first()
+    if not u:
+        u = M.User(phone=phone, role="farmer", language="fr")
+        db.add(u)
+        db.flush()
+    return u
+
 @app.post("/api/v1/alerts", status_code=201)
 def create_alert(body: AlertIn):
-    return {"id": "uuid-alert", "alert_type": body.alert_type, "threshold_value": body.threshold_value, "is_active": True}
+    try:
+        from app.database import SessionLocal
+        from app.models import all as M
+        db = SessionLocal()
+        try:
+            prod = _resolve_product(db, body.product_id)
+            if not prod:
+                raise HTTPException(404, f"Produit inconnu: {body.product_id}")
+            mkt = _resolve_market(db, body.market_id) if body.market_id else None
+            if body.market_id and not mkt:
+                raise HTTPException(404, f"Marche inconnu: {body.market_id}")
+            user = _demo_user(db, body.phone)
+            a = M.Alert(user_id=user.id, product_id=prod.id,
+                        market_id=mkt.id if mkt else None,
+                        alert_type=body.alert_type,
+                        threshold_value=body.threshold_value,
+                        channel=body.channel or "whatsapp", is_active=True)
+            db.add(a)
+            db.commit()
+            return {"id": str(a.id), "alert_type": a.alert_type,
+                    "threshold_value": float(a.threshold_value) if a.threshold_value else None,
+                    "is_active": True, "source": "db"}
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    return {"id": "uuid-alert", "alert_type": body.alert_type, "threshold_value": body.threshold_value, "is_active": True, "source": "mock"}
 
 @app.get("/api/v1/alerts")
 def list_alerts():
-    return {"data": []}
+    try:
+        from app.database import SessionLocal
+        from app.models import all as M
+        db = SessionLocal()
+        try:
+            rows = db.query(M.Alert, M.Product, M.Market).join(
+                M.Product, M.Alert.product_id == M.Product.id).outerjoin(
+                M.Market, M.Alert.market_id == M.Market.id).filter(
+                M.Alert.is_active == True).all()  # noqa: E712
+            if rows:
+                return {"data": [{
+                    "id": str(a.id), "product": p.code,
+                    "market": m.name_fr if m else None,
+                    "alert_type": a.alert_type,
+                    "threshold_value": float(a.threshold_value) if a.threshold_value else None,
+                    "channel": a.channel, "is_active": a.is_active} for a, p, m in rows],
+                    "source": "db"}
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return {"data": [], "source": "mock"}
 
 @app.delete("/api/v1/alerts/{alert_id}")
 def delete_alert(alert_id: str):
-    return {"id": alert_id, "is_active": False}
+    try:
+        from app.database import SessionLocal
+        from app.models import all as M
+        import uuid as _uuid
+        db = SessionLocal()
+        try:
+            a = db.query(M.Alert).filter(M.Alert.id == _uuid.UUID(alert_id)).first()
+            if a:
+                a.is_active = False
+                db.commit()
+                return {"id": alert_id, "is_active": False, "source": "db"}
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return {"id": alert_id, "is_active": False, "source": "mock"}
+
+@app.get("/api/v1/admin/tasks/check-alerts")
+def check_alerts_task():
+    """Moteur d'alertes (appele toutes les 15 min par GitHub Actions).
+    Evalue les alertes actives vs derniers prix approuves, cooldown 1h,
+    ecrit les notifications declenchees. TODO: dispatch WhatsApp/SMS."""
+    from datetime import datetime, timezone, timedelta
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.services.alerts_ml import eval_rule
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        cooldown = now - timedelta(hours=1)
+        alerts = db.query(M.Alert, M.Product).join(
+            M.Product, M.Alert.product_id == M.Product.id).filter(
+            M.Alert.is_active == True).all()  # noqa: E712
+        checked, triggered = 0, []
+        for a, prod in alerts:
+            q = db.query(M.PriceRecord).filter(
+                M.PriceRecord.product_id == prod.id,
+                M.PriceRecord.status == "approved")
+            if a.market_id:
+                q = q.filter(M.PriceRecord.market_id == a.market_id)
+            rec = q.order_by(M.PriceRecord.recorded_at.desc()).first()
+            if not rec:
+                continue
+            checked += 1
+            if a.threshold_value is None:
+                continue
+            if not eval_rule(a.alert_type, float(rec.price), float(a.threshold_value)):
+                continue
+            if a.last_triggered and a.last_triggered.replace(tzinfo=timezone.utc) > cooldown:
+                continue
+            op = ">" if a.alert_type == "price_above" else "<"
+            msg = (f"ALERTE {prod.code} : {float(rec.price)} F/kg {op} "
+                   f"{float(a.threshold_value)} F/kg")
+            db.add(M.Notification(user_id=a.user_id, alert_id=a.id,
+                                  message=msg, channel=a.channel or "whatsapp",
+                                  status="sent"))
+            a.last_triggered = now
+            triggered.append({"alert_id": str(a.id), "message": msg})
+        db.commit()
+        return {"checked": checked, "triggered": triggered, "count": len(triggered)}
+    finally:
+        db.close()
 
 @app.get("/api/v1/users/me")
 def me():

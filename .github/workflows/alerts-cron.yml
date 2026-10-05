@@ -1,0 +1,13 @@
+name: alerts-cron
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          URL="${{ secrets.RENDER_API_URL }}"
+          if [ -z "$URL" ]; then URL="https://agropulse-api-eo5o.onrender.com/api/v1"; fi
+          curl -s -m 120 "$URL/admin/tasks/check-alerts"
