@@ -13,7 +13,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 def health():
     return {"status": "ok", "version": "1.0.0"}
 
-# --- MOCK SEED (Togo) en attendant PostgreSQL ---
+# --- MOCK SEED (fallback si BDD vide/injoignable) ---
 PRODUCTS = {
     "MAIS": {"code": "MAIS", "name_fr": "Maïs"},
     "SOJA": {"code": "SOJA", "name_fr": "Soja"},
@@ -57,6 +57,35 @@ class AlertIn(BaseModel):
     threshold_value: Optional[float] = None
     channel: str = "whatsapp"
 
+def _db_prices(product: Optional[str] = None):
+    """Prix depuis PostgreSQL (price_records approved). Leve une exception si BDD vide."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
+    try:
+        q = db.query(M.PriceRecord, M.Product, M.Market).join(
+            M.Product, M.PriceRecord.product_id == M.Product.id).join(
+            M.Market, M.PriceRecord.market_id == M.Market.id).filter(
+            M.PriceRecord.status == "approved")
+        if product:
+            q = q.filter(M.Product.code == product.upper())
+        rows = q.order_by(M.PriceRecord.recorded_at.desc()).limit(50).all()
+        if not rows:
+            raise ValueError("BDD vide")
+        out = []
+        for rec, prod, mkt in rows:
+            out.append({
+                "product": {"code": prod.code, "name_fr": prod.name_fr},
+                "market": {"id": str(mkt.id), "name_fr": mkt.name_fr},
+                "avg_price": float(rec.price), "min_price": float(rec.price),
+                "max_price": float(rec.price), "currency": rec.currency or "XOF",
+                "unit": rec.unit or "kg", "variation_24h": 0.0, "sample_count": 1,
+                "updated_at": rec.recorded_at.isoformat() if rec.recorded_at else None,
+                "source": "db"})
+        return out
+    finally:
+        db.close()
+
 def check_auth(authorization: Optional[str] = Header(None), x_api_key: Optional[str] = Header(None)):
     if not authorization and not x_api_key:
         return {"tier": "public"}
@@ -78,10 +107,14 @@ def refresh(payload: dict):
 
 @app.get("/api/v1/prices/current")
 def prices_current(product: Optional[str] = None, country: Optional[str] = None):
-    data = PRICES
-    if product:
-        data = [p for p in data if p["product"]["code"] == product.upper()]
-    return {"data": data, "meta": {"total": len(data), "cached": True, "cache_ttl": 900}}
+    try:
+        data = _db_prices(product)
+        return {"data": data, "meta": {"total": len(data), "cached": False, "source": "db"}}
+    except Exception:
+        data = PRICES
+        if product:
+            data = [p for p in data if p["product"]["code"] == product.upper()]
+        return {"data": data, "meta": {"total": len(data), "cached": True, "cache_ttl": 900, "source": "mock"}}
 
 @app.get("/api/v1/prices/history")
 def prices_history(product: str, market: str, interval: str = "day"):
@@ -105,11 +138,41 @@ def forecasts(auth=Depends(check_auth)):
 
 @app.get("/api/v1/markets")
 def markets():
-    return {"data": MARKETS}
+    try:
+        from app.database import SessionLocal
+        from app.models import all as M
+        db = SessionLocal()
+        try:
+            rows = db.query(M.Market).filter(M.Market.is_active == True).all()  # noqa: E712
+            if rows:
+                return {"data": [
+                    {"id": str(m.id), "name_fr": m.name_fr, "market_type": m.market_type,
+                     "location": {"lat": float(m.lat) if m.lat else None,
+                                  "lng": float(m.lng) if m.lng else None},
+                     "is_active": m.is_active} for m in rows], "source": "db"}
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return {"data": MARKETS, "source": "mock"}
 
 @app.get("/api/v1/products")
 def products():
-    return {"data": list(PRODUCTS.values())}
+    try:
+        from app.database import SessionLocal
+        from app.models import all as M
+        db = SessionLocal()
+        try:
+            rows = db.query(M.Product).filter(M.Product.is_active == True).all()  # noqa: E712
+            if rows:
+                return {"data": [
+                    {"code": p.code, "name_fr": p.name_fr, "unit": p.unit} for p in rows],
+                    "source": "db"}
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return {"data": list(PRODUCTS.values()), "source": "mock"}
 
 @app.get("/api/v1/regions")
 def regions(country: str = "TGO"):
