@@ -8,3 +8,8 @@ __pycache__/
 !.env.example
 pgdata/
 .DS_Store
+
+# Cles privees JAMAIS dans le depot
+agropulse/backend/keys/
+*.pem
+!agropulse/backend/keys/.gitkeep

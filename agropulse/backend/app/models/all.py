@@ -100,6 +100,7 @@ class User(Base):
     language = Column(String(5), default="fr")
     region_id = Column(UUID(as_uuid=True), ForeignKey("regions.id"))
     whatsapp_id = Column(String(50))
+    totp_secret = Column(String(64))
     reliability_score = Column(Numeric(3,2), default=3.00)
     is_active = Column(Boolean, default=True)
 

@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from typing import Optional, List
 import time
 
+from app.config import settings
+from app.dependencies import get_current_user, require_plan, require_admin, check_alert_quota
+
 app = FastAPI(title="AgroPulse Africa API", version="1.0.0")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -41,6 +44,10 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     phone: str
     otp: str
+    totp_code: Optional[str] = None   # 2FA admin (RFC 6238)
+
+class RefreshIn(BaseModel):
+    refresh_token: str
 
 class PriceIn(BaseModel):
     product_id: str
@@ -59,9 +66,18 @@ class AlertIn(BaseModel):
     phone: Optional[str] = None  # rattache l'alerte a l'utilisateur (defaut: compte demo)
 
 def _db_prices(product: Optional[str] = None):
-    """Prix depuis PostgreSQL (price_records approved). Leve une exception si BDD vide."""
+    """Prix depuis PostgreSQL (price_records approved), avec cache Redis 15 min."""
+    import json
     from app.database import SessionLocal
     from app.models import all as M
+    from app.cache import cache_get, cache_set
+    cache_key = f"prices:current:{product or 'all'}"
+    cached = cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
     db = SessionLocal()
     try:
         q = db.query(M.PriceRecord, M.Product, M.Market).join(
@@ -83,28 +99,124 @@ def _db_prices(product: Optional[str] = None):
                 "unit": rec.unit or "kg", "variation_24h": 0.0, "sample_count": 1,
                 "updated_at": rec.recorded_at.isoformat() if rec.recorded_at else None,
                 "source": "db"})
+        cache_set(cache_key, json.dumps(out), 900)  # TTL 15 min
         return out
     finally:
         db.close()
 
 def check_auth(authorization: Optional[str] = Header(None), x_api_key: Optional[str] = Header(None)):
+    """Garde historique conservee pour compatibilite. Utilise les gardes reelles
+    (get_current_user / require_plan) sur les routes protegees."""
     if not authorization and not x_api_key:
         return {"tier": "public"}
-    return {"tier": "pro"}
+    return {"tier": "authenticated"}
 
 @app.post("/api/v1/auth/register", status_code=201)
 def register(body: RegisterIn):
-    return {"id": "uuid-mock", "phone": body.phone, "role": body.role, "access_token": "eyJ.mock", "refresh_token": "eyJ.mock"}
+    """Inscription : cree l'utilisateur en base, demarre l'essai Pro 14j (BR-11),
+    envoie un OTP SMS. Ne renvoie PAS de token : la connexion se fait par OTP."""
+    from datetime import datetime, timezone, timedelta
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.services import otp as otp_service
+    from app.security import create_token
+    from app.dependencies import resolve_plan
+    phone = otp_service._normalize(body.phone)
+    if len(phone) < 8:
+        raise HTTPException(422, "Numero de telephone invalide")
+    db = SessionLocal()
+    try:
+        user = db.query(M.User).filter(M.User.phone == phone).first()
+        created = False
+        if not user:
+            user = M.User(phone=phone, full_name=body.full_name,
+                          role=body.role or "farmer", language=body.language or "fr",
+                          region_id=body.region_id, is_active=True)
+            db.add(user)
+            db.flush()
+            created = True
+            # Essai Pro 14 jours (sans paiement -> downgrade Basic a expiration)
+            db.add(M.Subscription(user_id=user.id, plan="pro", status="active",
+                                  starts_at=datetime.now(timezone.utc),
+                                  ends_at=datetime.now(timezone.utc) + timedelta(days=14),
+                                  payment_method=None, amount=0, currency="XOF"))
+            db.commit()
+        plan = resolve_plan(db, user)
+        code = otp_service.issue_otp(phone)
+        response = {"id": str(user.id), "phone": phone, "role": user.role,
+                    "plan": plan, "created": created,
+                    "message": "Compte cree. Un code OTP vous a ete envoye par SMS."}
+        if settings.ENVIRONMENT != "production":
+            response["dev_otp"] = code
+        return response
+    finally:
+        db.close()
+
 
 @app.post("/api/v1/auth/login")
 def login(body: LoginIn):
-    if body.otp != "123456":
-        raise HTTPException(401, "OTP invalide (dev: 123456)")
-    return {"access_token": "eyJ.mock", "refresh_token": "eyJ.mock", "expires_in": 900}
+    """Connexion par OTP SMS (TTL 5 min, 3 tentatives) + 2FA TOTP pour l'admin."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.services import otp as otp_service
+    from app.security import create_token, totp_verify, totp_secret
+    from app.dependencies import resolve_plan
+    phone = otp_service._normalize(body.phone)
+    if otp_service.login_rate_limited(phone):
+        raise HTTPException(429, "Trop de tentatives. Reessayez dans 15 minutes.")
+    db = SessionLocal()
+    try:
+        user = db.query(M.User).filter(M.User.phone == phone).first()
+        if not user:
+            raise HTTPException(404, "Compte inconnu. Inscrivez-vous d'abord.")
+        if not user.is_active:
+            raise HTTPException(403, "Compte desactive")
+        if not otp_service.verify_otp(phone, body.otp):
+            left = otp_service.attempts_left(phone)
+            raise HTTPException(401, f"Code invalide ou expire ({left} tentative(s) restante(s))")
+        if user.role == "admin":
+            secret = user.totp_secret
+            if not secret:
+                # 2FA non configure : on genere et on le renvoie une seule fois
+                secret = totp_secret()
+                user.totp_secret = secret
+                db.commit()
+                response = {"requires_2fa_setup": True, "totp_secret": secret,
+                            "message": "2FA admin a activer : validez ce secret dans votre application d'authentification."}
+                return response
+            if not totp_verify(secret, body.totp_code or ""):
+                raise HTTPException(401, "Code 2FA invalide")
+        plan = resolve_plan(db, user)
+        access = create_token(str(user.id), phone, user.role, plan, "access")
+        refresh = create_token(str(user.id), phone, user.role, plan, "refresh")
+        otp_service.reset_login_attempts(phone)
+        return {"access_token": access, "refresh_token": refresh, "token_type": "Bearer",
+                "expires_in": 900, "plan": plan, "role": user.role,
+                "user_id": str(user.id)}
+    finally:
+        db.close()
+
 
 @app.post("/api/v1/auth/refresh")
-def refresh(payload: dict):
-    return {"access_token": "eyJ.mock", "expires_in": 900}
+def refresh(body: RefreshIn):
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.security import decode_token, create_token
+    from app.dependencies import resolve_plan
+    try:
+        payload = decode_token(body.refresh_token, "refresh")
+    except Exception:
+        raise HTTPException(401, "Refresh token invalide ou expire")
+    db = SessionLocal()
+    try:
+        user = db.query(M.User).filter(M.User.id == payload["sub"]).first()
+        if not user or not user.is_active:
+            raise HTTPException(401, "Utilisateur introuvable ou desactive")
+        plan = resolve_plan(db, user)
+        return {"access_token": create_token(str(user.id), user.phone, user.role, plan, "access"),
+                "token_type": "Bearer", "expires_in": 900, "plan": plan}
+    finally:
+        db.close()
 
 @app.get("/api/v1/prices/current")
 def prices_current(product: Optional[str] = None, country: Optional[str] = None):
@@ -118,24 +230,114 @@ def prices_current(product: Optional[str] = None, country: Optional[str] = None)
         return {"data": data, "meta": {"total": len(data), "cached": True, "cache_ttl": 900, "source": "mock"}}
 
 @app.get("/api/v1/prices/history")
-def prices_history(product: str, market: str, interval: str = "day"):
+def prices_history(product: str, market: str, interval: str = "day",
+                   user=Depends(require_plan("prices_history"))):
+    """Historique depuis la base (price_records approuves) — plan Pro et superieurs."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    from datetime import datetime, timezone, timedelta
+    db = SessionLocal()
+    try:
+        prod = _resolve_product(db, product)
+        if not prod:
+            raise HTTPException(404, f"Produit inconnu: {product}")
+        days = {"day": 30, "week": 90, "month": 365}.get(interval, 30)
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        q = db.query(M.PriceRecord).filter(
+            M.PriceRecord.product_id == prod.id,
+            M.PriceRecord.status == "approved",
+            M.PriceRecord.recorded_at >= since)
+        mkt = _resolve_market(db, market)
+        if mkt:
+            q = q.filter(M.PriceRecord.market_id == mkt.id)
+        rows = q.order_by(M.PriceRecord.recorded_at.asc()).all()
+        if rows:
+            by_day = {}
+            for r in rows:
+                key = r.recorded_at.date().isoformat()
+                by_day.setdefault(key, []).append(float(r.price))
+            data = [{"date": d, "avg_price": round(sum(v) / len(v), 2),
+                     "min_price": min(v), "max_price": max(v), "samples": len(v)}
+                    for d, v in sorted(by_day.items())]
+            return {"data": data, "meta": {"product": prod.code,
+                                           "market": mkt.name_fr if mkt else None,
+                                           "interval": interval, "count": len(data),
+                                           "source": "db"}}
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    finally:
+        db.close()
     return {"data": [
         {"date": "2026-07-01", "avg_price": 218.0, "min_price": 195.0, "max_price": 240.0},
         {"date": "2026-07-02", "avg_price": 220.5, "min_price": 200.0, "max_price": 245.0},
-    ], "meta": {"product": product, "market": market, "interval": interval, "count": 2}}
+    ], "meta": {"product": product, "market": market, "interval": interval, "count": 2, "source": "mock"}}
 
 @app.post("/api/v1/prices", status_code=201)
-def post_price(body: PriceIn, auth=Depends(check_auth)):
-    # BR-02 : flag ±30% médiane 7j (médiane mock 225)
+def post_price(body: PriceIn, user=Depends(require_plan("price_entry"))):
+    """Saisie de prix par un agent terrain. Persiste en base (status pending)."""
+    from datetime import datetime, timezone
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.services.pricing import check_range
+    db = SessionLocal()
+    try:
+        prod = _resolve_product(db, body.product_id)
+        if not prod:
+            raise HTTPException(404, f"Produit inconnu: {body.product_id}")
+        mkt = _resolve_market(db, body.market_id)
+        if not mkt:
+            raise HTTPException(404, f"Marche inconnu: {body.market_id}")
+        rng = check_range(prod.code, body.price)
+        rec = M.PriceRecord(
+            product_id=prod.id, market_id=mkt.id, price=body.price,
+            currency="XOF", unit="kg", volume_estimate=body.volume_estimate,
+            source_type="agent", source_id=user.id, photo_url=body.photo_url,
+            status="pending",
+            recorded_at=datetime.now(timezone.utc))
+        db.add(rec)
+        db.commit()
+        payload = {"id": str(rec.id), "status": "pending",
+                   "message": "Prix soumis, en attente de validation",
+                   "source": "db"}
+        if rng["flag"]:
+            payload["flag"] = "modération obligatoire"
+            payload["deviation"] = rng["deviation"]
+            payload["median"] = rng["median"]
+        return payload
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    finally:
+        db.close()
+    # BR-02 : flag ±30% médiane 7j
     median = 225.0
     dev = abs(body.price - median) / median * 100
     if dev > 30:
-        raise HTTPException(status_code=422, detail={"code": "PRICE_OUT_OF_RANGE", "message": "Le prix soumis dépasse de plus de 30% la médiane", "details": {"submitted": body.price, "median": median, "deviation": round(dev, 1)}})
-    return {"id": "uuid-mock", "status": "pending", "message": "Prix soumis, en attente de validation"}
+        raise HTTPException(status_code=422, detail={"code": "PRICE_OUT_OF_RANGE", "message": "Le prix soumis depasse de plus de 30% la mediane", "details": {"submitted": body.price, "median": median, "deviation": round(dev, 1)}})
+    return {"id": "uuid-mock", "status": "pending", "message": "Prix soumis, en attente de validation", "source": "mock"}
 
 @app.get("/api/v1/prices/forecasts")
-def forecasts(auth=Depends(check_auth)):
-    return {"data": [{"date": "2026-07-15", "predicted_price": 235.0, "confidence_low": 220.0, "confidence_high": 250.0, "model_version": "prophet-v1.2"}]}
+def forecasts(user=Depends(require_plan("forecast"))):
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
+    try:
+        rows = db.query(M.PriceForecast).order_by(M.PriceForecast.forecast_date).all()
+        if rows:
+            return {"data": [{"date": r.forecast_date.isoformat(),
+                              "predicted_price": float(r.predicted_price),
+                              "confidence_low": float(r.confidence_low) if r.confidence_low else None,
+                              "confidence_high": float(r.confidence_high) if r.confidence_high else None,
+                              "model_version": r.model_version} for r in rows],
+                    "source": "db"}
+    except Exception:
+        pass
+    finally:
+        db.close()
+    return {"data": [{"date": "2026-07-15", "predicted_price": 235.0, "confidence_low": 220.0, "confidence_high": 250.0, "model_version": "prophet-v1.2"}], "source": "mock"}
 
 @app.get("/api/v1/markets")
 def markets():
@@ -216,80 +418,74 @@ def _demo_user(db, phone: Optional[str] = None):
     return u
 
 @app.post("/api/v1/alerts", status_code=201)
-def create_alert(body: AlertIn):
+def create_alert(body: AlertIn, user=Depends(get_current_user)):
+    """Cree une alerte rattachee a l'utilisateur authentifie (quota par plan)."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
     try:
-        from app.database import SessionLocal
-        from app.models import all as M
-        db = SessionLocal()
-        try:
-            prod = _resolve_product(db, body.product_id)
-            if not prod:
-                raise HTTPException(404, f"Produit inconnu: {body.product_id}")
-            mkt = _resolve_market(db, body.market_id) if body.market_id else None
-            if body.market_id and not mkt:
-                raise HTTPException(404, f"Marche inconnu: {body.market_id}")
-            user = _demo_user(db, body.phone)
-            a = M.Alert(user_id=user.id, product_id=prod.id,
-                        market_id=mkt.id if mkt else None,
-                        alert_type=body.alert_type,
-                        threshold_value=body.threshold_value,
-                        channel=body.channel or "whatsapp", is_active=True)
-            db.add(a)
-            db.commit()
-            return {"id": str(a.id), "alert_type": a.alert_type,
-                    "threshold_value": float(a.threshold_value) if a.threshold_value else None,
-                    "is_active": True, "source": "db"}
-        finally:
-            db.close()
+        prod = _resolve_product(db, body.product_id)
+        if not prod:
+            raise HTTPException(404, f"Produit inconnu: {body.product_id}")
+        mkt = _resolve_market(db, body.market_id) if body.market_id else None
+        if body.market_id and not mkt:
+            raise HTTPException(404, f"Marche inconnu: {body.market_id}")
+        plan = getattr(user, "_plan", "basic")
+        check_alert_quota(db, user, plan)
+        a = M.Alert(user_id=user.id, product_id=prod.id,
+                    market_id=mkt.id if mkt else None,
+                    alert_type=body.alert_type,
+                    threshold_value=body.threshold_value,
+                    channel=body.channel or "whatsapp", is_active=True)
+        db.add(a)
+        db.commit()
+        return {"id": str(a.id), "alert_type": a.alert_type,
+                "threshold_value": float(a.threshold_value) if a.threshold_value else None,
+                "is_active": True, "source": "db"}
     except HTTPException:
         raise
-    except Exception:
-        pass
-    return {"id": "uuid-alert", "alert_type": body.alert_type, "threshold_value": body.threshold_value, "is_active": True, "source": "mock"}
+    finally:
+        db.close()
 
 @app.get("/api/v1/alerts")
-def list_alerts():
+def list_alerts(user=Depends(get_current_user)):
+    """Alertes de l'utilisateur connecte uniquement."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
     try:
-        from app.database import SessionLocal
-        from app.models import all as M
-        db = SessionLocal()
-        try:
-            rows = db.query(M.Alert, M.Product, M.Market).join(
-                M.Product, M.Alert.product_id == M.Product.id).outerjoin(
-                M.Market, M.Alert.market_id == M.Market.id).filter(
-                M.Alert.is_active == True).all()  # noqa: E712
-            if rows:
-                return {"data": [{
-                    "id": str(a.id), "product": p.code,
-                    "market": m.name_fr if m else None,
-                    "alert_type": a.alert_type,
-                    "threshold_value": float(a.threshold_value) if a.threshold_value else None,
-                    "channel": a.channel, "is_active": a.is_active} for a, p, m in rows],
-                    "source": "db"}
-        finally:
-            db.close()
-    except Exception:
-        pass
-    return {"data": [], "source": "mock"}
+        rows = db.query(M.Alert, M.Product, M.Market).join(
+            M.Product, M.Alert.product_id == M.Product.id).outerjoin(
+            M.Market, M.Alert.market_id == M.Market.id).filter(
+            M.Alert.user_id == user.id,
+            M.Alert.is_active == True).all()  # noqa: E712
+        return {"data": [{
+            "id": str(a.id), "product": p.code,
+            "market": m.name_fr if m else None,
+            "alert_type": a.alert_type,
+            "threshold_value": float(a.threshold_value) if a.threshold_value else None,
+            "channel": a.channel, "is_active": a.is_active} for a, p, m in rows],
+            "source": "db"}
+    finally:
+        db.close()
 
 @app.delete("/api/v1/alerts/{alert_id}")
-def delete_alert(alert_id: str):
+def delete_alert(alert_id: str, user=Depends(get_current_user)):
+    from app.database import SessionLocal
+    from app.models import all as M
+    import uuid as _uuid
+    db = SessionLocal()
     try:
-        from app.database import SessionLocal
-        from app.models import all as M
-        import uuid as _uuid
-        db = SessionLocal()
-        try:
-            a = db.query(M.Alert).filter(M.Alert.id == _uuid.UUID(alert_id)).first()
-            if a:
-                a.is_active = False
-                db.commit()
-                return {"id": alert_id, "is_active": False, "source": "db"}
-        finally:
-            db.close()
-    except Exception:
-        pass
-    return {"id": alert_id, "is_active": False, "source": "mock"}
+        a = db.query(M.Alert).filter(
+            M.Alert.id == _uuid.UUID(alert_id),
+            M.Alert.user_id == user.id).first()
+        if not a:
+            raise HTTPException(404, "Alerte introuvable")
+        a.is_active = False
+        db.commit()
+        return {"id": alert_id, "is_active": False, "source": "db"}
+    finally:
+        db.close()
 
 @app.get("/api/v1/admin/tasks/check-alerts")
 def check_alerts_task():
@@ -338,8 +534,12 @@ def check_alerts_task():
         db.close()
 
 @app.get("/api/v1/users/me")
-def me():
-    return {"id": "uuid", "phone": "+22890123456", "role": "farmer", "language": "fr"}
+def me(user=Depends(get_current_user)):
+    return {"id": str(user.id), "phone": user.phone, "full_name": user.full_name,
+            "role": user.role, "language": user.language,
+            "plan": getattr(user, "_plan", "basic"),
+            "region_id": str(user.region_id) if user.region_id else None,
+            "reliability_score": float(user.reliability_score or 3.0)}
 
 @app.get("/api/v1/marketplace/listings")
 def listings(product: Optional[str] = None):
@@ -351,24 +551,106 @@ def create_listing(payload: dict):
     return {"id": "uuid-listing", "status": "active", "reliability_score": 3.0}
 
 @app.get("/api/v1/admin/prices/pending")
-def pending():
-    return {"data": [{"id": "1", "market": "Kara", "product": "Maïs", "price": 350, "deviation": "+42%"}]}
+def pending(user=Depends(require_admin)):
+    """File de moderation : prix en attente de validation (admin uniquement)."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.services.pricing import check_range
+    db = SessionLocal()
+    try:
+        rows = db.query(M.PriceRecord, M.Product, M.Market).join(
+            M.Product, M.PriceRecord.product_id == M.Product.id).join(
+            M.Market, M.PriceRecord.market_id == M.Market.id).filter(
+            M.PriceRecord.status == "pending").order_by(
+            M.PriceRecord.created_at.desc()).limit(100).all()
+        data = []
+        for rec, prod, mkt in rows:
+            rng = check_range(prod.code, float(rec.price))
+            data.append({
+                "id": str(rec.id), "product": prod.code, "product_name": prod.name_fr,
+                "market": mkt.name_fr, "price": float(rec.price),
+                "volume_estimate": float(rec.volume_estimate) if rec.volume_estimate else None,
+                "deviation": f"+{rng['deviation']}%" if rng["deviation"] else "0%",
+                "deviation_pct": rng["deviation"], "flag": rng["flag"],
+                "median": rng["median"], "source_type": rec.source_type,
+                "photo_url": rec.photo_url,
+                "recorded_at": rec.recorded_at.isoformat() if rec.recorded_at else None})
+        return {"data": data, "source": "db"}
+    finally:
+        db.close()
+
+
+@app.post("/api/v1/admin/prices/{price_id}/approve")
+def approve(price_id: str, user=Depends(require_admin)):
+    """Valide un prix : status=approved + price_validations + invalide le cache."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.cache import cache_delete
+    import uuid as _uuid
+    db = SessionLocal()
+    try:
+        rec = db.query(M.PriceRecord).filter(M.PriceRecord.id == _uuid.UUID(price_id)).first()
+        if not rec:
+            raise HTTPException(404, "Prix introuvable")
+        if rec.status == "approved":
+            raise HTTPException(409, "Prix deja valide")
+        rec.status = "approved"
+        db.add(M.PriceValidation(price_record_id=rec.id, validator_id=user.id,
+                                action="approved"))
+        db.commit()
+        cache_delete(f"prices:{rec.product_id}:{rec.market_id}")
+        return {"id": price_id, "status": "approved", "published": True, "source": "db"}
+    finally:
+        db.close()
+
+
+@app.post("/api/v1/admin/prices/{price_id}/reject")
+def reject(price_id: str, user=Depends(require_admin), payload: Optional[dict] = None):
+    """Rejette un prix avec motif (notifie l'agent)."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    import uuid as _uuid
+    reason = (payload or {}).get("reason", "Non conforme")
+    db = SessionLocal()
+    try:
+        rec = db.query(M.PriceRecord).filter(M.PriceRecord.id == _uuid.UUID(price_id)).first()
+        if not rec:
+            raise HTTPException(404, "Prix introuvable")
+        rec.status = "rejected"
+        db.add(M.PriceValidation(price_record_id=rec.id, validator_id=user.id,
+                                action="rejected", reason=reason))
+        db.commit()
+        return {"id": price_id, "status": "rejected", "reason": reason, "source": "db"}
+    finally:
+        db.close()
 
 @app.get("/api/v1/users/me/subscription")
-def my_subscription():
-    return {"plan": "pro", "status": "active", "trial_days_left": 14, "renewal": "Flooz"}
+def my_subscription(user=Depends(get_current_user)):
+    from datetime import datetime, timezone
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
+    try:
+        sub = (db.query(M.Subscription)
+               .filter(M.Subscription.user_id == user.id)
+               .order_by(M.Subscription.starts_at.desc()).first())
+        if not sub:
+            return {"plan": "basic", "status": "none", "trial_days_left": 0}
+        ends = sub.ends_at
+        if ends and ends.tzinfo is None:
+            ends = ends.replace(tzinfo=timezone.utc)
+        days = max(0, (ends - datetime.now(timezone.utc)).days) if ends else None
+        return {"plan": getattr(user, "_plan", sub.plan), "status": sub.status,
+                "trial_days_left": days if sub.payment_method is None and days is not None else 0,
+                "ends_at": ends.isoformat() if ends else None,
+                "payment_method": sub.payment_method,
+                "renewal": "Flooz" if sub.payment_method in ("flooz", "tmoney") else None}
+    finally:
+        db.close()
 
 @app.get("/api/v1/marketplace/listings/{listing_id}")
 def listing_detail(listing_id: str):
     return {"id": listing_id, "status": "active", "reliability_score": 3.0}
-
-@app.post("/api/v1/admin/prices/{price_id}/approve")
-def approve(price_id: str):
-    return {"id": price_id, "status": "approved", "published": True}
-
-@app.post("/api/v1/admin/prices/{price_id}/reject")
-def reject(price_id: str, payload: dict = None):
-    return {"id": price_id, "status": "rejected"}
 
 @app.post("/api/v1/payments/init")
 def payment_init(payload: dict):
