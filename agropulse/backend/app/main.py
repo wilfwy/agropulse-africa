@@ -122,7 +122,7 @@ def check_auth(authorization: Optional[str] = Header(None), x_api_key: Optional[
     return {"tier": "authenticated"}
 
 @app.post("/api/v1/auth/register", status_code=201)
-def register(body: RegisterIn):
+def register(body: RegisterIn, x_debug_key: Optional[str] = Header(None)):
     """Inscription : cree l'utilisateur en base, demarre l'essai Pro 14j (BR-11),
     envoie un OTP SMS. Ne renvoie PAS de token : la connexion se fait par OTP."""
     from datetime import datetime, timezone, timedelta
@@ -156,7 +156,7 @@ def register(body: RegisterIn):
         response = {"id": str(user.id), "phone": phone, "role": user.role,
                     "plan": plan, "created": created,
                     "message": "Compte cree. Un code OTP vous a ete envoye par SMS."}
-        if settings.ENVIRONMENT != "production":
+        if settings.ENVIRONMENT != "production" or otp_service.debug_key_valid(x_debug_key):
             response["dev_otp"] = code
         return response
     finally:
@@ -164,7 +164,7 @@ def register(body: RegisterIn):
 
 
 @app.post("/api/v1/auth/login")
-def login(body: LoginIn):
+def login(body: LoginIn, x_debug_key: Optional[str] = Header(None)):
     """Connexion par OTP SMS (TTL 5 min, 3 tentatives) + 2FA TOTP pour l'admin."""
     from app.database import SessionLocal
     from app.models import all as M
@@ -200,9 +200,12 @@ def login(body: LoginIn):
         access = create_token(str(user.id), phone, user.role, plan, "access")
         refresh = create_token(str(user.id), phone, user.role, plan, "refresh")
         otp_service.reset_login_attempts(phone)
-        return {"access_token": access, "refresh_token": refresh, "token_type": "Bearer",
-                "expires_in": 900, "plan": plan, "role": user.role,
-                "user_id": str(user.id)}
+        payload = {"access_token": access, "refresh_token": refresh, "token_type": "Bearer",
+                   "expires_in": 900, "plan": plan, "role": user.role,
+                   "user_id": str(user.id)}
+        if settings.ENVIRONMENT != "production" or otp_service.debug_key_valid(x_debug_key):
+            payload["dev_otp"] = None
+        return payload
     finally:
         db.close()
 

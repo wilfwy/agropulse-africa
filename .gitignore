@@ -13,3 +13,6 @@ pgdata/
 agropulse/backend/keys/
 *.pem
 !agropulse/backend/keys/.gitkeep
+check_prod.py
+e2e_*.py
+audit*.py

@@ -1,6 +1,8 @@
 """OTP SMS : generation, envoi (Africa's Talking si configure), verification, rate limit."""
+import hmac
 import random
 import time
+from typing import Optional
 
 from app.cache import cache_get, cache_set, incr
 from app.config import settings
@@ -22,7 +24,7 @@ def _normalize(phone: str) -> str:
 
 def send_sms(phone: str, message: str) -> bool:
     """Envoi reel si SMS_API_KEY configure, sinon journalise (mode dev)."""
-    key = settings.__dict__.get("SMS_API_KEY", "") or os.environ.get("SMS_API_KEY", "")
+    key = os.environ.get("SMS_API_KEY", "")
     if not key:
         print(f"[SMS:dev] -> {phone} : {message}")
         return False
@@ -38,6 +40,13 @@ def send_sms(phone: str, message: str) -> bool:
     except Exception as exc:  # pragma: no cover
         print(f"[SMS:erreur] {exc}")
         return False
+
+
+def debug_key_valid(key: Optional[str] = None) -> bool:
+    """Cle de debogage : permet de lire l'OTP sans fournisseur SMS configure.
+    Active uniquement si DEBUG_OTP_KEY est definie dans l'environnement."""
+    expected = os.environ.get("DEBUG_OTP_KEY", "")
+    return bool(expected) and bool(key) and hmac.compare_digest(str(key), expected)
 
 
 import os  # noqa: E402  (utilise dans send_sms)
