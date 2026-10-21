@@ -22,9 +22,40 @@ def on_startup():
 
 # --- health ---
 @app.get("/api/v1/health")
-def health():
+def health(detail: bool = False):
     from app.cache import ping as redis_ping
-    return {"status": "ok", "version": "1.1.0", "redis": redis_ping()}
+    out = {"status": "ok", "version": "1.1.0", "redis": redis_ping()}
+    if detail:
+        out["db"] = db_diagnostics()
+    return out
+
+
+def db_diagnostics() -> dict:
+    """Etat du schema en base — sans donnees sensibles."""
+    from sqlalchemy import text
+    from app.database import engine
+    info = {"reachable": False, "tables": [], "missing_columns": []}
+    try:
+        with engine.connect() as conn:
+            info["reachable"] = True
+            rows = conn.execute(text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='public' ORDER BY table_name")).fetchall()
+            info["tables"] = [r[0] for r in rows]
+            for table, col in (("users", "totp_secret"), ("users", "phone"),
+                               ("products", "code"), ("price_records", "product_id"),
+                               ("subscriptions", "plan"), ("alerts", "threshold_value")):
+                if table not in info["tables"]:
+                    info["missing_columns"].append(f"{table}.{col} (table absente)")
+                    continue
+                c = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name=:t AND column_name=:c"), {"t": table, "c": col}).fetchone()
+                if not c:
+                    info["missing_columns"].append(f"{table}.{col}")
+    except Exception as exc:
+        info["error"] = str(exc)[:200]
+    return info
 
 # --- MOCK SEED (fallback si BDD vide/injoignable) ---
 PRODUCTS = {
