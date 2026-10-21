@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import time
@@ -7,7 +8,26 @@ import time
 from app.config import settings
 from app.dependencies import get_current_user, require_plan, require_admin, check_alert_quota
 
-app = FastAPI(title="AgroPulse Africa API", version="1.1.0")
+app = FastAPI(title="AgroPulse Africa API", version="1.1.1")
+
+# Derniere erreur non geree, exposée via /health?detail=1 pour diagnostic
+_LAST_ERROR = {}
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    import traceback
+    _LAST_ERROR.clear()
+    _LAST_ERROR.update({
+        "path": str(request.url.path),
+        "type": type(exc).__name__,
+        "message": str(exc)[:300],
+        "traceback": traceback.format_exc()[-1200:],
+    })
+    print(f"[error] {request.url.path} -> {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(status_code=500,
+                        content={"detail": "Erreur interne", "type": type(exc).__name__})
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -27,6 +47,7 @@ def health(detail: bool = False):
     out = {"status": "ok", "version": "1.1.0", "redis": redis_ping()}
     if detail:
         out["db"] = db_diagnostics()
+        out["last_error"] = _LAST_ERROR or None
     return out
 
 

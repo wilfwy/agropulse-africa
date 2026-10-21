@@ -74,7 +74,8 @@ def cache_delete(key: str) -> None:
 
 
 def incr(key: str, ttl: int = 60) -> int:
-    """Compteur avec expiration — utilise pour le rate limiting."""
+    """Compteur avec expiration — utilise pour le rate limiting.
+    Format memoire : _MEM[key] = (expire_at, value)."""
     r = get_redis()
     if r:
         try:
@@ -84,10 +85,17 @@ def incr(key: str, ttl: int = 60) -> int:
             return int(pipe.execute()[0])
         except Exception:
             pass
-    val, exp = _MEM.get(key, (0, 0))
-    val = int(val) + 1
-    _MEM[key] = (exp if exp else time.time() + ttl, val)
-    return val
+    entry = _MEM.get(key)
+    if entry is None:
+        value, expire_at = 1, time.time() + ttl
+    else:
+        expire_at, value = entry
+        if expire_at < time.time():          # cle expiree -> on repart de 1
+            value, expire_at = 1, time.time() + ttl
+        else:
+            value = int(value) + 1
+    _MEM[key] = (expire_at, value)
+    return value
 
 
 def ping() -> bool:
