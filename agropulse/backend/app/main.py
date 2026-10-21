@@ -7,14 +7,24 @@ import time
 from app.config import settings
 from app.dependencies import get_current_user, require_plan, require_admin, check_alert_quota
 
-app = FastAPI(title="AgroPulse Africa API", version="1.0.0")
+app = FastAPI(title="AgroPulse Africa API", version="1.1.0")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.on_event("startup")
+def on_startup():
+    """Garantit que le schema BDD est complet avant de servir."""
+    from app.migrations import ensure_schema
+    report = ensure_schema()
+    print(f"[startup] schema: {report}")
+
 
 # --- health ---
 @app.get("/api/v1/health")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    from app.cache import ping as redis_ping
+    return {"status": "ok", "version": "1.1.0", "redis": redis_ping()}
 
 # --- MOCK SEED (fallback si BDD vide/injoignable) ---
 PRODUCTS = {
