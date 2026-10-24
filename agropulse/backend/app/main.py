@@ -44,7 +44,7 @@ def on_startup():
 @app.get("/api/v1/health")
 def health(detail: bool = False):
     from app.cache import ping as redis_ping
-    out = {"status": "ok", "version": "1.1.0", "redis": redis_ping()}
+    out = {"status": "ok", "version": app.version, "redis": redis_ping()}
     if detail:
         out["db"] = db_diagnostics()
         out["last_error"] = _LAST_ERROR or None
