@@ -97,7 +97,7 @@ Nouveau module `app/services/demo_data.py` :
 - coordonnées GPS réelles des 14 marchés togolais, injectées automatiquement ;
 - génération d'un historique de démonstration (120 jours, 6 produits, 6 marchés, 2 relevés/jour, soit 8 640 lignes) si la base contient moins de 100 relevés.
 
-> Les lignes de démonstration sont marquées `source_type = 'synthetic'` et l'interface les étiquette « série de démonstration ». Pour les supprimer quand les agents terrain alimenteront la base :
+> Les lignes de démonstration sont marquées `source_type = 'synthetic'` et l'interface les étiquette « série de démonstration ». Le drapeau est calculé côté API (`meta.demo`, `meta.synthetic_share`) : il reste vrai tant que la majorité des relevés sont synthétiques, puis disparaît automatiquement quand les agents terrain alimentent la base. Pour les supprimer d'un coup :
 > `DELETE FROM price_records WHERE source_type = 'synthetic';`
 
 ### 3.5 Site web — 8 pages
