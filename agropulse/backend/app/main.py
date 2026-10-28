@@ -8,7 +8,7 @@ import time
 from app.config import settings
 from app.dependencies import get_current_user, require_plan, require_admin, check_alert_quota
 
-app = FastAPI(title="AgroPulse Africa API", version="1.2.0")
+app = FastAPI(title="AgroPulse Africa API", version="1.3.0")
 
 # Derniere erreur non geree, exposée via /health?detail=1 pour diagnostic
 _LAST_ERROR = {}
@@ -39,10 +39,13 @@ def on_startup():
     from app.migrations import ensure_schema
     report = ensure_schema()
     print(f"[startup] schema: {report}")
-    from app.services.demo_data import ensure_market_geo, ensure_demo_history
+    from app.services.demo_data import (ensure_market_geo, ensure_demo_history,
+                                        ensure_demo_accounts)
     print(f"[startup] geo: {ensure_market_geo()}")
     if os.environ.get("SEED_DEMO_HISTORY", "true").lower() != "false":
         print(f"[startup] historique: {ensure_demo_history()}")
+    if os.environ.get("SEED_DEMO_ACCOUNTS", "true").lower() != "false":
+        print(f"[startup] comptes demo: {ensure_demo_accounts()}")
 
 
 # --- health ---
@@ -724,6 +727,43 @@ def check_alerts_task():
     finally:
         db.close()
 
+class DemoLoginIn(BaseModel):
+    role: str = "coop"
+
+
+@app.post("/api/v1/auth/demo-login")
+def demo_login(body: DemoLoginIn):
+    """Acces demonstration : ouvre un compte de test sans SMS ni 2FA.
+
+    A desactiver (DEMO_LOGIN=0) avant toute mise en service reelle.
+    """
+    from app.database import SessionLocal
+    from app.models import all as M
+    from app.security import create_token
+    from app.dependencies import resolve_plan
+    from app.services.demo_data import DEMO_ACCOUNTS
+    if str(settings.DEMO_LOGIN).lower() in ("0", "false", "no", "off"):
+        raise HTTPException(403, "Acces demonstration desactive")
+    key = (body.role or "coop").strip().lower()
+    if key not in DEMO_ACCOUNTS:
+        raise HTTPException(404, "Profil de demonstration inconnu")
+    spec = DEMO_ACCOUNTS[key]
+    db = SessionLocal()
+    try:
+        user = db.query(M.User).filter(M.User.phone == spec["phone"]).first()
+        if not user:
+            raise HTTPException(503, "Comptes de demonstration non initialises")
+        plan = resolve_plan(db, user)
+        access = create_token(str(user.id), user.phone, user.role, plan, "access")
+        refresh = create_token(str(user.id), user.phone, user.role, plan, "refresh")
+        return {"access_token": access, "refresh_token": refresh,
+                "token_type": "Bearer", "expires_in": 900,
+                "plan": plan, "role": user.role, "user_id": str(user.id),
+                "full_name": user.full_name, "demo": True}
+    finally:
+        db.close()
+
+
 @app.get("/api/v1/users/me")
 def me(user=Depends(get_current_user)):
     return {"id": str(user.id), "phone": user.phone, "full_name": user.full_name,
@@ -737,6 +777,7 @@ def listings(product: Optional[str] = None, limit: int = 30):
     """Annonces actives, avec produit, région et vendeur."""
     from app.database import SessionLocal
     from app.models import all as M
+    from app.services.demo_data import DEMO_PHONES
     db = SessionLocal()
     try:
         q = (db.query(M.MarketplaceListing, M.Product, M.Region, M.User)
@@ -761,6 +802,7 @@ def listings(product: Optional[str] = None, limit: int = 30):
                 "seller": (seller.full_name or "Producteur") if seller else "Producteur",
                 "reliability_score": float(seller.reliability_score or 3.0) if seller else 3.0,
                 "description": rec.description,
+                "demo": bool(seller and seller.phone in DEMO_PHONES),
                 "created_at": rec.created_at.isoformat() if rec.created_at else None,
             })
         return {"data": data, "meta": {"count": len(data), "source": "db"}}

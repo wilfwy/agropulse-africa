@@ -181,3 +181,131 @@ def data_origin(session=None) -> dict:
             db.close()
     share = round(synthetic / total, 3) if total else 0.0
     return {"demo": bool(total and synthetic / total >= 0.5), "synthetic_share": share}
+
+
+# --- Comptes de demonstration -------------------------------------------------
+# Le site public n'a pas de fournisseur SMS : sans ces comptes, personne ne peut
+# se connecter ni tester la moderation, la saisie terrain ou la marketplace.
+# Ils sont crees au demarrage (idempotent) et accessibles via /auth/demo-login.
+DEMO_ACCOUNTS = {
+    "farmer": {"phone": "+22890000001", "name": "Akouvi Demo", "role": "farmer", "plan": "basic"},
+    "coop": {"phone": "+22890000002", "name": "Cooperative Demo", "role": "coop", "plan": "coop"},
+    "agent": {"phone": "+22890000003", "name": "Agent Demo", "role": "agent", "plan": "pro"},
+    "admin": {"phone": "+22890000004", "name": "Admin Demo", "role": "admin", "plan": "enterprise"},
+}
+DEMO_PHONES = {v["phone"] for v in DEMO_ACCOUNTS.values()}
+
+
+def ensure_demo_accounts(db=None) -> dict:
+    """Cree les comptes de demonstration et leur contenu (idempotent)."""
+    from datetime import datetime, timezone, timedelta
+    from app.database import SessionLocal
+    from app.models import all as M
+
+    own = db is None
+    db = db or SessionLocal()
+    users = {}
+    created = 0
+    try:
+        for key, spec in DEMO_ACCOUNTS.items():
+            user = db.query(M.User).filter(M.User.phone == spec["phone"]).first()
+            if not user:
+                user = M.User(phone=spec["phone"], full_name=spec["name"],
+                              role=spec["role"], language="fr", is_active=True)
+                db.add(user)
+                db.flush()
+                created += 1
+            else:
+                user.role = spec["role"]
+                user.full_name = spec["name"]
+                user.is_active = True
+            users[key] = user
+            sub = (db.query(M.Subscription)
+                   .filter(M.Subscription.user_id == user.id)
+                   .order_by(M.Subscription.starts_at.desc()).first())
+            if not sub:
+                db.add(M.Subscription(
+                    user_id=user.id, plan=spec["plan"], status="active",
+                    starts_at=datetime.now(timezone.utc),
+                    ends_at=datetime.now(timezone.utc) + timedelta(days=3650),
+                    payment_method="demo", amount=0, currency="XOF"))
+            elif sub.plan != spec["plan"]:
+                sub.plan = spec["plan"]
+                sub.ends_at = datetime.now(timezone.utc) + timedelta(days=3650)
+                sub.status = "active"
+        db.commit()
+
+        products = {p.code: p for p in db.query(M.Product).all()}
+        markets = {m.name_fr: m for m in db.query(M.Market).all()}
+        regions = {r.code: r for r in db.query(M.Region).all()}
+
+        # Alertes du compte agriculteur (page d'accueil et /alertes)
+        alerts_added = 0
+        farmer = users["farmer"]
+        for code, mname, atype, threshold in (
+            ("MAIS", "Kara", "price_above", 250),
+            ("TOMATE", "Hedzranawoe (Lome)", "price_below", 400),
+        ):
+            prod = products.get(code)
+            if not prod:
+                continue
+            exists = db.query(M.Alert).filter(
+                M.Alert.user_id == farmer.id, M.Alert.product_id == prod.id).first()
+            if exists:
+                continue
+            market = markets.get(mname)
+            db.add(M.Alert(user_id=farmer.id, product_id=prod.id,
+                           market_id=market.id if market else None,
+                           alert_type=atype, threshold_value=threshold,
+                           channel="whatsapp", is_active=True))
+            alerts_added += 1
+
+        # Annonces de la cooperative demo
+        listings_added = 0
+        coop = users["coop"]
+        for code, qty, price, region_code, desc in (
+            ("MAIS", 2500, 235, "PLA", "Recolte 2026, sacs de 50 kg, enlevement Atakpame"),
+            ("SOJA", 1200, 310, "CEN", "Soja trie, lot homogene, disponible Sokode"),
+            ("TOMATE", 400, 425, "MAR", "Tomate fraiche, cueillette du matin, Lome"),
+        ):
+            prod = products.get(code)
+            reg = regions.get(region_code) or db.query(M.Region).first()
+            if not prod or not reg:
+                continue
+            exists = db.query(M.MarketplaceListing).filter(
+                M.MarketplaceListing.seller_id == coop.id,
+                M.MarketplaceListing.product_id == prod.id).first()
+            if exists:
+                continue
+            db.add(M.MarketplaceListing(seller_id=coop.id, product_id=prod.id,
+                                        region_id=reg.id, quantity=qty, unit="kg",
+                                        price_per_unit=price, currency="XOF",
+                                        description=desc, status="active"))
+            listings_added += 1
+
+        # Un releve en attente pour illustrer la moderation
+        pending_added = 0
+        agent = users["agent"]
+        prod = products.get("MAIS")
+        market = markets.get("Kara")
+        if prod and market:
+            exists = db.query(M.PriceRecord).filter(
+                M.PriceRecord.source_id == agent.id,
+                M.PriceRecord.status == "pending").first()
+            if not exists:
+                db.add(M.PriceRecord(
+                    product_id=prod.id, market_id=market.id, price=241.5,
+                    currency="XOF", unit="kg", volume_estimate=350,
+                    source_type="agent", source_id=agent.id, status="pending",
+                    recorded_at=datetime.now(timezone.utc) - timedelta(hours=3)))
+                pending_added += 1
+        db.commit()
+        return {"ok": True, "accounts": len(users), "created": created,
+                "alerts": alerts_added, "listings": listings_added,
+                "pending": pending_added}
+    except Exception as exc:
+        db.rollback()
+        return {"ok": False, "error": str(exc)[:200]}
+    finally:
+        if own:
+            db.close()

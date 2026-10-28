@@ -45,6 +45,14 @@ export async function login(phone, otp) {
   return r.json();
 }
 
+export async function demoLogin(role = "coop") {
+  const r = await fetch(`${API}/auth/demo-login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+  return r.json();
+}
+
 export async function me() {
   const r = await fetch(`${API}/users/me`, {
     headers: { Authorization: `Bearer ${getToken()}` }, cache: "no-store",

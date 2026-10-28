@@ -124,7 +124,9 @@ export default function MarketplacePage() {
       <div className="grid grid-2">
         {offers.map((o) => (
           <div className="card" key={o.id}>
-            <h3><Icon name="market" size={17} /> {o.quantity} {o.unit} — {o.product_name || o.product}</h3>
+            <h3><Icon name="market" size={17} /> {o.quantity} {o.unit} — {o.product_name || o.product}
+              {o.demo && <span className="badge stable" style={{ marginLeft: 8 }}>démonstration</span>}
+            </h3>
             <div className="price">{o.price_per_unit} F/kg</div>
             <div className="muted">
               {o.region || "Région non précisée"} · {o.seller} · fiabilité {o.reliability_score}/5

@@ -8,5 +8,7 @@ class Settings(BaseSettings):
     WHATSAPP_TOKEN: str = ""
     WHATSAPP_PHONE_ID: str = ""
     S3_BUCKET: str = "agropulse-data"
+    # Acces demonstration (comptes de test sans SMS). Mettre 0 en production reelle.
+    DEMO_LOGIN: str = "1"
 
 settings = Settings()
