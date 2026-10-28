@@ -35,9 +35,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 @app.on_event("startup")
 def on_startup():
     """Garantit que le schema BDD est complet avant de servir."""
+    import os
     from app.migrations import ensure_schema
     report = ensure_schema()
     print(f"[startup] schema: {report}")
+    from app.services.demo_data import ensure_market_geo, ensure_demo_history
+    print(f"[startup] geo: {ensure_market_geo()}")
+    if os.environ.get("SEED_DEMO_HISTORY", "true").lower() != "false":
+        print(f"[startup] historique: {ensure_demo_history()}")
 
 
 # --- health ---
@@ -128,12 +133,16 @@ class AlertIn(BaseModel):
     phone: Optional[str] = None  # rattache l'alerte a l'utilisateur (defaut: compte demo)
 
 def _db_prices(product: Optional[str] = None):
-    """Prix depuis PostgreSQL (price_records approved), avec cache Redis 15 min."""
+    """Prix agrégés par (produit, marché) sur 7 jours, avec variation vs 7 jours précédents.
+
+    Remplace l'ancienne version qui retournait chaque relevé brut : le front
+    affiche désormais une vraie moyenne, un min/max et une variation calculée.
+    """
     import json
+    from sqlalchemy import text
     from app.database import SessionLocal
-    from app.models import all as M
     from app.cache import cache_get, cache_set
-    cache_key = f"prices:current:{product or 'all'}"
+    cache_key = f"prices:current:v2:{product or 'all'}"
     cached = cache_get(cache_key)
     if cached:
         try:
@@ -142,26 +151,56 @@ def _db_prices(product: Optional[str] = None):
             pass
     db = SessionLocal()
     try:
-        q = db.query(M.PriceRecord, M.Product, M.Market).join(
-            M.Product, M.PriceRecord.product_id == M.Product.id).join(
-            M.Market, M.PriceRecord.market_id == M.Market.id).filter(
-            M.PriceRecord.status == "approved")
-        if product:
-            q = q.filter(M.Product.code == product.upper())
-        rows = q.order_by(M.PriceRecord.recorded_at.desc()).limit(50).all()
+        rows = db.execute(text("""
+            WITH cur AS (
+                SELECT pr.product_id, pr.market_id,
+                       AVG(pr.price)::float AS avg_price,
+                       MIN(pr.price)::float AS min_price,
+                       MAX(pr.price)::float AS max_price,
+                       COUNT(*)::int AS sample_count,
+                       MAX(pr.recorded_at) AS updated_at
+                FROM price_records pr
+                WHERE pr.status='approved'
+                  AND pr.recorded_at >= now() - interval '7 days'
+                GROUP BY pr.product_id, pr.market_id
+            ), prev AS (
+                SELECT pr.product_id, pr.market_id, AVG(pr.price)::float AS avg_price
+                FROM price_records pr
+                WHERE pr.status='approved'
+                  AND pr.recorded_at >= now() - interval '14 days'
+                  AND pr.recorded_at <  now() - interval '7 days'
+                GROUP BY pr.product_id, pr.market_id
+            )
+            SELECT p.code, p.name_fr, m.id, m.name_fr, m.market_type, m.lat, m.lng,
+                   cur.avg_price, cur.min_price, cur.max_price, cur.sample_count,
+                   cur.updated_at, prev.avg_price
+            FROM cur
+            JOIN products p ON p.id = cur.product_id
+            JOIN markets m  ON m.id = cur.market_id
+            LEFT JOIN prev  ON prev.product_id = cur.product_id
+                           AND prev.market_id  = cur.market_id
+            WHERE 1=1
+        """ + (" AND p.code = :code" if product else "") + """
+            ORDER BY p.code, cur.avg_price DESC
+        """), {"code": product.upper()} if product else {}).fetchall()
         if not rows:
             raise ValueError("BDD vide")
         out = []
-        for rec, prod, mkt in rows:
+        for (code, pname, mid, mname, mtype, lat, lng,
+             avg, mn, mx, cnt, updated, prev_avg) in rows:
+            variation = ((avg - prev_avg) / prev_avg * 100) if prev_avg else 0.0
             out.append({
-                "product": {"code": prod.code, "name_fr": prod.name_fr},
-                "market": {"id": str(mkt.id), "name_fr": mkt.name_fr},
-                "avg_price": float(rec.price), "min_price": float(rec.price),
-                "max_price": float(rec.price), "currency": rec.currency or "XOF",
-                "unit": rec.unit or "kg", "variation_24h": 0.0, "sample_count": 1,
-                "updated_at": rec.recorded_at.isoformat() if rec.recorded_at else None,
+                "product": {"code": code, "name_fr": pname},
+                "market": {"id": str(mid), "name_fr": mname, "market_type": mtype,
+                           "lat": float(lat) if lat is not None else None,
+                           "lng": float(lng) if lng is not None else None},
+                "avg_price": round(avg, 2), "min_price": round(mn, 2),
+                "max_price": round(mx, 2), "currency": "XOF",
+                "unit": "kg", "variation_24h": round(variation, 2),
+                "sample_count": int(cnt),
+                "updated_at": updated.isoformat() if updated else None,
                 "source": "db"})
-        cache_set(cache_key, json.dumps(out), 900)  # TTL 15 min
+        cache_set(cache_key, json.dumps(out), 900)
         return out
     finally:
         db.close()
@@ -293,6 +332,72 @@ def prices_current(product: Optional[str] = None, country: Optional[str] = None)
         if product:
             data = [p for p in data if p["product"]["code"] == product.upper()]
         return {"data": data, "meta": {"total": len(data), "cached": True, "cache_ttl": 900, "source": "mock"}}
+
+@app.get("/api/v1/prices/trend")
+def prices_trend(product: str = "MAIS", market: Optional[str] = None, days: int = 30):
+    """Série journalière publique (30 jours max) : moyenne, min/max, moyennes mobiles,
+    projection à 7 jours et statistiques descriptives."""
+    from app.database import SessionLocal
+    from app.services import analytics
+    days = max(7, min(int(days or 30), 30))
+    db = SessionLocal()
+    try:
+        prod = _resolve_product(db, product)
+        if not prod:
+            raise HTTPException(404, f"Produit inconnu: {product}")
+        mkt = _resolve_market(db, market) if market else None
+        series = analytics.daily_series(db, prod.id, mkt.id if mkt else None, days)
+        stats = analytics.compute_stats(series)
+        prices = [p["avg_price"] for p in series]
+        return {
+            "data": series,
+            "forecast": analytics.forecast(series),
+            "stats": stats,
+            "histogram": analytics.histogram(prices),
+            "meta": {
+                "product": prod.code, "product_name": prod.name_fr,
+                "market": mkt.name_fr if mkt else None,
+                "days": days, "count": len(series), "source": "db",
+                "demo": True,
+            },
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/v1/stats/overview")
+def stats_overview(product: str = "MAIS", days: int = 30):
+    """Tableau de bord complet : série, statistiques, marchés, distribution, arbitrage."""
+    from app.database import SessionLocal
+    from app.services import analytics
+    days = max(7, min(int(days or 30), 30))
+    db = SessionLocal()
+    try:
+        prod = _resolve_product(db, product)
+        if not prod:
+            raise HTTPException(404, f"Produit inconnu: {product}")
+        data = analytics.overview(db, prod.id, days)
+        data["product"] = {"code": prod.code, "name_fr": prod.name_fr, "unit": prod.unit}
+        data["meta"] = {"days": days, "source": "db"}
+        return data
+    finally:
+        db.close()
+
+
+@app.get("/api/v1/markets/geo")
+def markets_geo(days: int = 7):
+    """Marchés géolocalisés avec prix moyen par produit — alimente la carte 3D."""
+    from app.database import SessionLocal
+    from app.services import analytics
+    from app.services.demo_data import ensure_market_geo
+    ensure_market_geo()
+    db = SessionLocal()
+    try:
+        data = analytics.market_overview(db, max(1, min(int(days or 7), 30)))
+        return {"data": data, "meta": {"count": len(data), "source": "db"}}
+    finally:
+        db.close()
+
 
 @app.get("/api/v1/prices/history")
 def prices_history(product: str, market: str, interval: str = "day",

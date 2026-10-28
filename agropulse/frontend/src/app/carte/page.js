@@ -1,27 +1,39 @@
-import Icon from "../../components/icons";
-const PINS = [
-  ["Hedzranawoé (Lomé)", "Maritime", "+3,2%", 1],
-  ["Kara", "Kara", "+2,1%", 1],
-  ["Sokodé", "Centrale", "−1,5%", 0],
-  ["Atakpamé", "Plateaux", "+1,2%", 1],
-  ["Cinkassé", "Savanes — frontière Ghana", "stable", 2],
-];
-export default function CartePage() {
-  return (<main>
-    <h2 style={{ fontSize: 20, display: "flex", alignItems: "center", gap: 8 }}><Icon name="map" /> Carte des marchés — surplus / pénurie</h2>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <div className="grid grid-2">
-      {PINS.map((p, i) => (
-        <div className="card" key={i}>
-          <h3><Icon name="pin" size={17} /> {p[0]}</h3>
-          <div className="muted">{p[1]}</div>
-          <span className={`badge ${p[3] === 1 ? "up" : p[3] === 0 ? "down" : "stable"}`}>{p[2]}</span>
-        </div>
-      ))}
-    </div>
-    <section className="panel" style={{ marginTop: 12 }}>
-      <h2><Icon name="arrow" size={18} /> Corridors commerciaux</h2>
-      <div className="muted">Lomé vers Accra · Lomé vers Cotonou · Cinkassé transfrontalier. Vert : surplus — Rouge : pénurie. Fond Leaflet + OpenStreetMap en production.</div>
-    </section>
-  </main>);
+import CarteClient from "../../components/CarteClient";
+import { FALLBACK_PRODUCTS, fallbackGeo, fallbackOverview } from "../../lib/fallback";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+async function getJson(path, ms = 9000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(`${API}${path}`, { cache: "no-store", signal: ctrl.signal });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export const dynamic = "force-dynamic";
+
+export default async function CartePage() {
+  const [geo, overview, products] = await Promise.all([
+    getJson("/markets/geo?days=30"),
+    getJson("/stats/overview?product=MAIS&days=30"),
+    getJson("/products"),
+  ]);
+
+  return (
+    <main>
+      <CarteClient
+        products={products?.data?.length ? products.data : FALLBACK_PRODUCTS}
+        initialProduct="MAIS"
+        initialGeo={geo?.data?.length ? geo.data : fallbackGeo("MAIS")}
+        initialOverview={overview?.stats ? overview : fallbackOverview("MAIS", 30)}
+      />
+    </main>
+  );
 }
