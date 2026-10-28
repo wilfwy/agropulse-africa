@@ -1,6 +1,7 @@
 import PriceChart from "../components/PriceChart";
 import StatsPanel from "../components/StatsPanel";
 import MarketExplorer from "../components/MarketExplorer";
+import AlertsPreview from "../components/AlertsPreview";
 import Icon from "../components/icons";
 import { fallbackOverview, fallbackPrices } from "../lib/fallback";
 import { prettyName, prettyProduct } from "../lib/names";
@@ -128,9 +129,7 @@ export default async function Page() {
         </section>
         <section className="panel">
           <h2><Icon name="bell" size={18} /> Alertes actives</h2>
-          <div className="alert-item"><b>Maïs au-dessus de 250 F/kg à Kara</b> <span className="muted">— WhatsApp</span></div>
-          <div className="alert-item"><b>Tomate sous 400 F/kg à Lomé</b> <span className="muted">— WhatsApp</span></div>
-          <p><a className="btn btn-forest" href="/alertes">Gérer mes alertes</a></p>
+          <AlertsPreview />
         </section>
       </div>
 

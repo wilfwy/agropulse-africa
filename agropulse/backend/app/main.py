@@ -552,7 +552,25 @@ def products():
 
 @app.get("/api/v1/regions")
 def regions(country: str = "TGO"):
-    return {"data": [{"id": "plateaux", "name_fr": "Plateaux"}, {"id": "kara", "name_fr": "Kara"}, {"id": "maritime", "name_fr": "Maritime"}]}
+    try:
+        from app.database import SessionLocal
+        from app.models import all as M
+        db = SessionLocal()
+        try:
+            rows = (db.query(M.Region)
+                    .join(M.Country, M.Country.id == M.Region.country_id)
+                    .filter(M.Country.code == country.upper()).all())
+            if rows:
+                return {"data": [{"id": str(r.id), "code": r.code, "name_fr": r.name_fr}
+                                 for r in rows], "source": "db"}
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return {"data": [{"id": "plateaux", "code": "PLT", "name_fr": "Plateaux"},
+                     {"id": "kara", "code": "KAR", "name_fr": "Kara"},
+                     {"id": "maritime", "code": "MAR", "name_fr": "Maritime"}],
+            "source": "mock"}
 
 def _resolve_product(db, ref):
     from app.models import all as M
@@ -715,13 +733,86 @@ def me(user=Depends(get_current_user)):
             "reliability_score": float(user.reliability_score or 3.0)}
 
 @app.get("/api/v1/marketplace/listings")
-def listings(product: Optional[str] = None):
-    return {"data": []}
+def listings(product: Optional[str] = None, limit: int = 30):
+    """Annonces actives, avec produit, région et vendeur."""
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
+    try:
+        q = (db.query(M.MarketplaceListing, M.Product, M.Region, M.User)
+             .outerjoin(M.Product, M.Product.id == M.MarketplaceListing.product_id)
+             .outerjoin(M.Region, M.Region.id == M.MarketplaceListing.region_id)
+             .outerjoin(M.User, M.User.id == M.MarketplaceListing.seller_id)
+             .filter(M.MarketplaceListing.status == "active"))
+        if product:
+            q = q.filter(M.Product.code == product.upper())
+        rows = q.order_by(M.MarketplaceListing.created_at.desc()).limit(max(1, min(limit, 100))).all()
+        data = []
+        for rec, prod, reg, seller in rows:
+            data.append({
+                "id": str(rec.id),
+                "product": prod.code if prod else None,
+                "product_name": prod.name_fr if prod else None,
+                "quantity": float(rec.quantity or 0),
+                "unit": rec.unit,
+                "price_per_unit": float(rec.price_per_unit or 0),
+                "currency": rec.currency,
+                "region": reg.name_fr if reg else None,
+                "seller": (seller.full_name or "Producteur") if seller else "Producteur",
+                "reliability_score": float(seller.reliability_score or 3.0) if seller else 3.0,
+                "description": rec.description,
+                "created_at": rec.created_at.isoformat() if rec.created_at else None,
+            })
+        return {"data": data, "meta": {"count": len(data), "source": "db"}}
+    finally:
+        db.close()
 
 @app.post("/api/v1/marketplace/listings", status_code=201)
-def create_listing(payload: dict):
-    # BR-20 : score initial 3/5
-    return {"id": "uuid-listing", "status": "active", "reliability_score": 3.0}
+def create_listing(payload: dict, user=Depends(require_plan("marketplace"))):
+    """Publie une annonce (plan Coopérative et supérieur). Score initial 3/5."""
+    import uuid as _uuid
+    from app.database import SessionLocal
+    from app.models import all as M
+    db = SessionLocal()
+    try:
+        prod = _resolve_product(db, str(payload.get("product_id") or ""))
+        if not prod:
+            raise HTTPException(422, "Produit inconnu")
+        region = None
+        ref = payload.get("region_id")
+        if ref:
+            try:
+                region = db.query(M.Region).filter(M.Region.id == _uuid.UUID(str(ref))).first()
+            except (ValueError, AttributeError):
+                region = None
+            if region is None:
+                region = (db.query(M.Region)
+                          .filter((M.Region.code == str(ref)) |
+                                  (M.Region.name_fr.ilike(f"%{ref}%")))
+                          .first())
+        if region is None:
+            region = db.query(M.Region).first()
+        if region is None:
+            raise HTTPException(422, "Region indisponible")
+        try:
+            quantity = float(payload.get("quantity") or 0)
+            price = float(payload.get("price_per_unit") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Quantite ou prix invalide")
+        if quantity <= 0 or price <= 0:
+            raise HTTPException(422, "Quantite et prix doivent etre positifs")
+        rec = M.MarketplaceListing(
+            seller_id=user.id, product_id=prod.id, region_id=region.id,
+            quantity=quantity, unit=payload.get("unit") or "kg",
+            price_per_unit=price, currency="XOF",
+            description=(payload.get("description") or None), status="active")
+        db.add(rec)
+        db.commit()
+        return {"id": str(rec.id), "status": "active",
+                "reliability_score": float(user.reliability_score or 3.0),
+                "product": prod.code, "region": region.name_fr}
+    finally:
+        db.close()
 
 @app.get("/api/v1/admin/prices/pending")
 def pending(user=Depends(require_admin)):
@@ -823,7 +914,29 @@ def my_subscription(user=Depends(get_current_user)):
 
 @app.get("/api/v1/marketplace/listings/{listing_id}")
 def listing_detail(listing_id: str):
-    return {"id": listing_id, "status": "active", "reliability_score": 3.0}
+    import uuid as _uuid
+    from app.database import SessionLocal
+    from app.models import all as M
+    try:
+        lid = _uuid.UUID(listing_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(404, "Annonce introuvable")
+    db = SessionLocal()
+    try:
+        rec = db.query(M.MarketplaceListing).filter(M.MarketplaceListing.id == lid).first()
+        if not rec:
+            raise HTTPException(404, "Annonce introuvable")
+        prod = db.query(M.Product).filter(M.Product.id == rec.product_id).first()
+        reg = db.query(M.Region).filter(M.Region.id == rec.region_id).first()
+        return {"id": str(rec.id), "product": prod.code if prod else None,
+                "product_name": prod.name_fr if prod else None,
+                "quantity": float(rec.quantity or 0), "unit": rec.unit,
+                "price_per_unit": float(rec.price_per_unit or 0), "currency": rec.currency,
+                "region": reg.name_fr if reg else None, "description": rec.description,
+                "status": rec.status,
+                "created_at": rec.created_at.isoformat() if rec.created_at else None}
+    finally:
+        db.close()
 
 @app.post("/api/v1/payments/init")
 def payment_init(payload: dict):
