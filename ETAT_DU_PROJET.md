@@ -38,7 +38,9 @@ Tout le reste peut être testé dès maintenant.
 | Base de données | Neon (PostgreSQL 15, région Europe) |
 | Cache | Upstash Redis (optionnel, repli mémoire automatique) |
 
-**État du déploiement :** le site public et l'API tournent sur la version 1.2.0 (analytique détaillée, nouvelle carte 3D, nouveaux graphiques). Vérification effectuée le 28 octobre 2026 : `/health` renvoie `1.2.0`, les huit pages répondent en 200, la carte affiche les tuiles réelles et les colonnes de prix.
+**État du déploiement :** le site public et l'API tournent sur la version 1.3.0 (analytique détaillée, carte 3D, graphiques, modération, saisie terrain et marketplace reliés à l'API, accès démonstration). Vérification effectuée le 28 octobre 2026 : `/health` renvoie `1.3.0`, les huit pages répondent en 200, la carte affiche les tuiles réelles et les colonnes de prix.
+
+**Accès démonstration :** la page `/login` propose quatre profils de test (agriculteur, coopérative, agent terrain, administrateur) qui ouvrent une session sans SMS. Ces comptes (`+228 90 00 00 01` à `04`), leurs alertes, leurs annonces et un relevé en attente de modération sont créés automatiquement au démarrage. À couper avec `DEMO_LOGIN=0` avant une mise en service réelle.
 
 ---
 
@@ -51,7 +53,7 @@ Tout le reste peut être testé dès maintenant.
 | Domaine | Routes | État |
 |---|---|---|
 | Santé | `GET /health` (+ `?detail=1` : tables, colonnes manquantes, dernière erreur) | Fonctionne |
-| Authentification | `POST /auth/register`, `/auth/login`, `/auth/refresh` | Fonctionne |
+| Authentification | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/demo-login` | Fonctionne (démo sans SMS) |
 | Prix | `GET /prices/current`, `/prices/trend`, `/prices/history`, `/prices/forecasts`, `/prices/convert`, `POST /prices` | Fonctionne |
 | Analyse | `GET /stats/overview` | Fonctionne (production) |
 | Référentiel | `GET /markets`, `/markets/geo`, `/products`, `/regions` | Fonctionne |
@@ -155,14 +157,15 @@ Design : navbar en verre, hero avec image, 20 icônes SVG maison, **aucun emoji*
 
 ## 4. Ce qui a été ajouté lors de la dernière itération
 
-- Module analytique complet et trois nouveaux endpoints (`/prices/trend`, `/stats/overview`, `/markets/geo`).
-- Agrégation réelle des prix par produit et par marché (moyenne, min, max, variation sur 7 jours).
-- Coordonnées GPS des marchés et historique de démonstration automatique.
-- Refonte totale du graphique (interactif, multi-séries, info-bulles).
-- Nouveau panneau de statistiques et d'arbitrage.
-- Nouvelle carte interactive 3D avec colonnes, corridors animés et fond satellite.
-- Jeu de données de repli : le site reste lisible même si l'API est en veille.
-- Corrections : chargement de la carte, initialisation des sources, résilience aux tuiles lentes.
+Itération du 28 octobre 2026 (en plus de l'analytique, des graphiques et de la carte 3D) :
+
+- `/admin` branché sur la file de modération réelle : approbation, rejet motivé, gestion des erreurs et des doublons (409).
+- `/agent` branché sur `POST /prices` : listes produits/marchés issues de l'API, file locale de secours et synchronisation manuelle.
+- `/marketplace` : annonces persistées en base, publication réservée aux plans Coopérative/Entreprise, affichage du vendeur, de la région et de la fiabilité.
+- Comptes de démonstration avec rôles et plans, alertes et annonces de test ; relevé en attente pour illustrer la modération.
+- Accueil : les alertes affichées proviennent désormais de l'API (`AlertsPreview`), plus de contenu figé.
+- `/regions` lit la table `regions` (repli sur trois régions si la base est vide).
+- Étiquette « démonstration » sur les annonces et rappel du caractère fictif des données.
 
 ---
 
@@ -176,6 +179,7 @@ Design : navbar en verre, hero avec image, 20 icônes SVG maison, **aucun emoji*
 | 2 | Passerelle SMS réelle | Africa's Talking ou agrégateur Moov/Togocom : sans elle, aucun utilisateur ne reçoit son code |
 | 3 | Envoi WhatsApp réel | Appels Graph API (`POST /messages`), gabarits validés par Meta, service de notification et journal des envois |
 | 4 | Retirer `DEBUG_OTP_KEY` | Une fois les SMS opérationnels, supprimer la clé de débogage |
+| 5 | Fermer l'accès démonstration | `DEMO_LOGIN=0` sur Render dès que les comptes réels existent (les profils de test ouvrent une session sans mot de passe) |
 
 ### P1 — Cœur produit
 
@@ -274,8 +278,8 @@ Attendu : une série d'environ 30 points, 6 marchés géolocalisés, un bloc d'a
 2. Brancher l'envoi WhatsApp (Graph API) : c'est la promesse centrale du produit.
 3. Brancher un opérateur SMS, puis retirer `DEBUG_OTP_KEY`.
 4. Ajouter les paiements Flooz / T-Money et les commissions marketplace.
-5. Créer un compte administrateur et un compte agent pour la démonstration.
-6. Passer à un modèle de prévision saisonnier et à Alembic.
+5. Passer à un modèle de prévision saisonnier et à Alembic.
+6. Avant toute mise en service réelle : `DEMO_LOGIN=0` et purge de l'historique synthétique.
 
 ---
 
