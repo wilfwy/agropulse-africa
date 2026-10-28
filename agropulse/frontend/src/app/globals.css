@@ -90,7 +90,10 @@ a{color:var(--forest)}
   font-weight:700;font-size:14px;cursor:pointer;transition:all .18s ease}
 .pill:hover{border-color:var(--forest)}
 .pill.on{background:var(--forest);border-color:var(--forest);color:#fff;box-shadow:0 4px 14px rgba(45,106,79,.35)}
-select.pill{appearance:none}
+select.pill{appearance:none;width:auto;flex:0 0 auto;padding:8px 36px 8px 16px;background-color:#fff;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%232D6A4F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center}
+select.pill:hover{background-color:#fff}
 /* ---------- Forms ---------- */
 label{font-size:14px;font-weight:700;display:grid;gap:6px}
 input,select{font-size:16px;padding:10px 12px;border-radius:12px;border:1.5px solid #dfe5df;min-height:var(--touch);width:100%;background:#fff;font-family:inherit}

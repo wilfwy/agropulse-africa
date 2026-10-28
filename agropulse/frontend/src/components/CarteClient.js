@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Icon from "./icons";
 import PriceChart from "./PriceChart";
 import StatsPanel from "./StatsPanel";
+import { prettyName } from "../lib/names";
 
 const TogoMap3D = dynamic(() => import("./TogoMap3D"), {
   ssr: false,
@@ -74,7 +75,7 @@ export default function CarteClient({ products = [], initialProduct = "MAIS", in
           : null;
         return {
           id: m.id,
-          name: m.name_fr,
+          name: prettyName(m.name_fr),
           lat: m.lat,
           lng: m.lng,
           price,

@@ -3,6 +3,7 @@ import StatsPanel from "../components/StatsPanel";
 import MarketExplorer from "../components/MarketExplorer";
 import Icon from "../components/icons";
 import { fallbackOverview, fallbackPrices } from "../lib/fallback";
+import { prettyName, prettyProduct } from "../lib/names";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -35,8 +36,8 @@ export default async function Page() {
 
   const rawItems = live?.data?.length ? live.data : fallbackPrices("MAIS");
   const items = rawItems.map((p) => ({
-    product: p.product.name_fr,
-    market: p.market.name_fr,
+    product: prettyProduct(p.product.name_fr),
+    market: prettyName(p.market.name_fr),
     price: p.avg_price,
     min: p.min_price,
     max: p.max_price,
@@ -112,7 +113,7 @@ export default async function Page() {
           <div className="top-markets">
             {(ov.markets || []).slice(0, 3).map((m) => (
               <div className="top-market" key={m.market_id}>
-                <span>{m.market.replace(" (Lome)", " (Lomé)")}</span>
+                <span>{prettyName(m.market)}</span>
                 <b>{m.avg_price} F/kg</b>
                 <span className={m.change_pct >= 0 ? "up-text" : "down-text"}>
                   {m.change_pct > 0 ? "+" : ""}{m.change_pct}%
