@@ -106,7 +106,7 @@ export default function AlertesPage() {
                 </select>
               </label>
               <label>Seuil (FCFA/kg)
-                <input type="number" min="1" step="1" value={form.threshold}
+                <input type="number" aria-label="Seuil en FCFA par kilogramme" min="1" step="1" value={form.threshold}
                   onChange={(e) => setForm({ ...form, threshold: e.target.value })} required />
               </label>
             </div>

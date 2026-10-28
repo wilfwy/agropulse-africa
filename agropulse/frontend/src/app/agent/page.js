@@ -120,11 +120,11 @@ export default function AgentPage() {
         </label>
         <div className="grid grid-2">
           <label>Prix (FCFA/kg)
-            <input type="number" min="1" step="0.5" value={form.price}
+            <input type="number" aria-label="Prix en FCFA par kilogramme" min="1" step="0.5" value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })} required />
           </label>
           <label>Volume (kg)
-            <input type="number" min="0" step="1" value={form.volume}
+            <input type="number" aria-label="Volume estimé en kilogrammes" min="0" step="1" value={form.volume}
               onChange={(e) => setForm({ ...form, volume: e.target.value })} />
           </label>
         </div>

@@ -12,9 +12,13 @@ export default function TarifsPage() {
         <h3 style={{ fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><Icon name="bolt" size={17} /> {p.n}</h3>
         <div className="price" style={{ fontSize: 20 }}>{p.p}</div>
         <ul className="muted">{p.f.map((f, j) => (<li key={j}>{f}</li>))}</ul>
-        <button className={`btn ${p.pop ? "btn-primary" : "btn-forest"}`} style={{ width: "100%" }}>{p.cta}</button>
+        <a className={`btn ${p.pop ? "btn-primary" : "btn-forest"}`} style={{ width: "100%" }} href="/login">{p.cta}</a>
       </div>))}
     </div>
+    <p className="muted" style={{ marginTop: 12 }}>
+      La souscription en ligne n&apos;est pas encore ouverte : l&apos;accès démonstration
+      est gratuit et immédiat depuis la page de connexion.
+    </p>
     <section className="panel" style={{ marginTop: 12 }}><h2><Icon name="market" size={18} /> Paiement</h2>
       <div className="muted">Flooz · T-Money (1,5%) · Virement Ecobank / BOA · Facture Enterprise 30 jours. Renouvellement auto, période de grâce 7 jours.</div></section>
   </main>);

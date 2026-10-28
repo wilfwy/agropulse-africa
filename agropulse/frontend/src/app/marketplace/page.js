@@ -93,11 +93,11 @@ export default function MarketplacePage() {
           </select>
         </label>
         <label>Quantité (kg)
-          <input type="number" min="1" step="1" value={form.quantity}
+          <input type="number" aria-label="Quantité en kilogrammes" min="1" step="1" value={form.quantity}
             onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
         </label>
         <label>Prix (F/kg)
-          <input type="number" min="1" step="0.5" value={form.price}
+          <input type="number" aria-label="Prix en FCFA par kilogramme" min="1" step="0.5" value={form.price}
             onChange={(e) => setForm({ ...form, price: e.target.value })} required />
         </label>
         <label style={{ gridColumn: "1 / -1" }}>Description (facultatif)
