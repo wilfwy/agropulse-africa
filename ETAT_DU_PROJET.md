@@ -58,7 +58,7 @@ Tout le reste peut être testé dès maintenant.
 | Alertes | `POST /alerts`, `GET /alerts`, `DELETE /alerts/{id}` | Fonctionne (cloisonné par utilisateur) |
 | Administration | `GET /admin/prices/pending`, `POST /admin/prices/{id}/approve`, `/reject`, `GET /admin/tasks/check-alerts` | Fonctionne |
 | Utilisateurs | `GET /users/me`, `GET /users/me/subscription` | Fonctionne |
-| Marketplace | `GET /marketplace/listings`, `POST /marketplace/listings`, `GET /marketplace/listings/{id}` | Lecture/écriture en mémoire (pas encore persisté) |
+| Marketplace | `GET /marketplace/listings`, `POST /marketplace/listings`, `GET /marketplace/listings/{id}` | Fonctionne (persisté en base, publication réservée aux plans Coopérative/Entreprise) |
 | Paiement | `POST /payments/init`, webhooks Flooz / T-Money | Stubs |
 | WhatsApp | `GET/POST /webhooks/whatsapp` | Parseur d'intentions, pas d'envoi |
 
@@ -109,9 +109,9 @@ Nouveau module `app/services/demo_data.py` :
 | `/alertes` | Création, liste, suppression d'alertes réelles (API) | Fonctionne |
 | `/tarifs` | Quatre plans, comparatif | Fonctionne |
 | `/login` | Connexion par téléphone + OTP | Fonctionne (dépend des SMS) |
-| `/marketplace` | Annonces | Interface seulement |
-| `/admin` | Modération des prix | Interface + API prêtes, à brancher |
-| `/agent` | Saisie de prix terrain | Interface seulement |
+| `/marketplace` | Annonces réelles (lecture publique, publication authentifiée) | Fonctionne |
+| `/admin` | File de modération réelle : approuver / rejeter | Fonctionne (compte admin requis) |
+| `/agent` | Saisie terrain reliée à `POST /prices`, file locale de secours | Fonctionne (rôle agent requis) |
 
 Design : navbar en verre, hero avec image, 20 icônes SVG maison, **aucun emoji**, responsive mobile avec barre de navigation basse.
 
@@ -181,10 +181,10 @@ Design : navbar en verre, hero avec image, 20 icônes SVG maison, **aucun emoji*
 
 | # | Tâche | Détail |
 |---|---|---|
-| 7 | Marketplace persistée | Tables `marketplace_listings`, `orders`, `commissions` ; cycle de vie d'une annonce ; commission Coopérative |
+| 7 | Marketplace — suite | Persistance et publication faites (`marketplace_listings`) ; restent commandes, commissions 1–3 %, échange de coordonnées |
 | 8 | Paiements réels | Intégration Flooz et T-Money (initiation, webhooks signés, réconciliation, factures) |
-| 9 | Tableau de bord admin | Brancher `/admin` sur la modération réelle, ajouter la gestion des utilisateurs et des abonnements |
-| 10 | Application agent | Formulaire de saisie terrain relié à `POST /prices`, mode hors-ligne, file d'attente de synchronisation |
+| 9 | Tableau de bord admin — suite | Modération branchée ; restent gestion des utilisateurs, abonnements et indicateurs agrégés |
+| 10 | Application agent — suite | Saisie et file locale branchées ; reste le mode hors-ligne complet (service worker, photo) |
 | 11 | Notifications | File d'attente (Celery) pour alertes prix, rappels d'abonnement, échecs et relances, avec journal de livraison |
 | 12 | Moteur de prévision | Remplacer la régression linéaire par un modèle saisonnier (Prophet ou SARIMA) entraîné sur l'historique réel |
 | 13 | Facturation et plans | Parcours d'abonnement complet : souscription, échéances, grâce, rétrogradation, relances |
@@ -273,10 +273,9 @@ Attendu : une série d'environ 30 points, 6 marchés géolocalisés, un bloc d'a
 1. Saisir les variables d'environnement Render et tester une connexion complète avec `X-Debug-Key`.
 2. Brancher l'envoi WhatsApp (Graph API) : c'est la promesse centrale du produit.
 3. Brancher un opérateur SMS, puis retirer `DEBUG_OTP_KEY`.
-4. Persister la marketplace et les commissions.
-5. Brancher les pages admin et agent sur l'API.
-6. Ajouter les paiements Flooz / T-Money.
-7. Passer à un modèle de prévision saisonnier et à Alembic.
+4. Ajouter les paiements Flooz / T-Money et les commissions marketplace.
+5. Créer un compte administrateur et un compte agent pour la démonstration.
+6. Passer à un modèle de prévision saisonnier et à Alembic.
 
 ---
 
