@@ -155,3 +155,29 @@ def ensure_demo_history(days: int = 120, force: bool = False) -> dict:
         return {"ok": False, "error": str(exc)[:200]}
 
     return {"ok": True, "seeded": len(rows), "days": days}
+
+
+def data_origin(session=None) -> dict:
+    """Part de relevés synthétiques dans la base.
+
+    Sert à étiqueter honnêtement l'interface : tant que l'historique est
+    majoritairement composé de lignes de démonstration, `demo` vaut True et
+    les pages affichent la mention « série de démonstration ».
+    """
+    from sqlalchemy import text
+    from app.database import SessionLocal
+
+    own = session is None
+    db = session or SessionLocal()
+    try:
+        total = db.execute(text("SELECT COUNT(*) FROM price_records")).scalar() or 0
+        synthetic = db.execute(text(
+            "SELECT COUNT(*) FROM price_records WHERE source_type = 'synthetic'"
+        )).scalar() or 0
+    except Exception:
+        return {"demo": False, "synthetic_share": 0.0}
+    finally:
+        if own:
+            db.close()
+    share = round(synthetic / total, 3) if total else 0.0
+    return {"demo": bool(total and synthetic / total >= 0.5), "synthetic_share": share}

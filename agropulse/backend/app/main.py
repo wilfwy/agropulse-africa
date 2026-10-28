@@ -324,9 +324,11 @@ def refresh(body: RefreshIn):
 
 @app.get("/api/v1/prices/current")
 def prices_current(product: Optional[str] = None, country: Optional[str] = None):
+    from app.services.demo_data import data_origin
     try:
         data = _db_prices(product)
-        return {"data": data, "meta": {"total": len(data), "cached": False, "source": "db"}}
+        return {"data": data, "meta": {"total": len(data), "cached": False, "source": "db",
+                                       **data_origin()}}
     except Exception:
         data = PRICES
         if product:
@@ -358,7 +360,7 @@ def prices_trend(product: str = "MAIS", market: Optional[str] = None, days: int 
                 "product": prod.code, "product_name": prod.name_fr,
                 "market": mkt.name_fr if mkt else None,
                 "days": days, "count": len(series), "source": "db",
-                "demo": True,
+                **data_origin(db),
             },
         }
     finally:
@@ -370,6 +372,7 @@ def stats_overview(product: str = "MAIS", days: int = 30):
     """Tableau de bord complet : série, statistiques, marchés, distribution, arbitrage."""
     from app.database import SessionLocal
     from app.services import analytics
+    from app.services.demo_data import data_origin
     days = max(7, min(int(days or 30), 30))
     db = SessionLocal()
     try:
@@ -378,7 +381,7 @@ def stats_overview(product: str = "MAIS", days: int = 30):
             raise HTTPException(404, f"Produit inconnu: {product}")
         data = analytics.overview(db, prod.id, days)
         data["product"] = {"code": prod.code, "name_fr": prod.name_fr, "unit": prod.unit}
-        data["meta"] = {"days": days, "source": "db"}
+        data["meta"] = {"days": days, "source": "db", **data_origin(db)}
         return data
     finally:
         db.close()
@@ -389,12 +392,12 @@ def markets_geo(days: int = 7):
     """Marchés géolocalisés avec prix moyen par produit — alimente la carte 3D."""
     from app.database import SessionLocal
     from app.services import analytics
-    from app.services.demo_data import ensure_market_geo
+    from app.services.demo_data import ensure_market_geo, data_origin
     ensure_market_geo()
     db = SessionLocal()
     try:
         data = analytics.market_overview(db, max(1, min(int(days or 7), 30)))
-        return {"data": data, "meta": {"count": len(data), "source": "db"}}
+        return {"data": data, "meta": {"count": len(data), "source": "db", **data_origin(db)}}
     finally:
         db.close()
 
