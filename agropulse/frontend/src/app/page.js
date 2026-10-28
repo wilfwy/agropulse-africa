@@ -1,143 +1,275 @@
-import PriceChart from "../components/PriceChart";
-import StatsPanel from "../components/StatsPanel";
-import MarketExplorer from "../components/MarketExplorer";
-import AlertsPreview from "../components/AlertsPreview";
 import Icon from "../components/icons";
-import { fallbackOverview, fallbackPrices } from "../lib/fallback";
-import { prettyName, prettyProduct } from "../lib/names";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+export const metadata = {
+  title: "AgroPulse Africa — Le vrai prix des marchés agricoles togolais",
+  description:
+    "AgroPulse Africa aide les producteurs, commerçants et coopératives du Togo à connaître les prix des marchés agricoles et à recevoir des alertes sur WhatsApp.",
+};
 
-async function getJson(path, ms = 9000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const r = await fetch(`${API}${path}`, { cache: "no-store", signal: ctrl.signal });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+const CHIFFRES = [
+  ["14", "marchés référencés"],
+  ["5", "régions couvertes"],
+  ["9", "filières suivies"],
+  ["0", "application à installer"],
+];
 
-export const dynamic = "force-dynamic";
+const CONSTAT = [
+  {
+    icon: "eye",
+    titre: "Le prix se devine",
+    texte:
+      "Loin du marché, on accepte le prix proposé. Sans repère, il est difficile de négocier.",
+  },
+  {
+    icon: "chart",
+    titre: "La marge s'évapore",
+    texte:
+      "L'écart entre le champ et l'étal profite à ceux qui détiennent l'information.",
+  },
+  {
+    icon: "market",
+    titre: "L'information est dispersée",
+    texte:
+      "Chaque marché a ses cours, chaque jour. Personne ne voit l'ensemble du pays.",
+  },
+];
 
-function fmtDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-}
+const REPONSE = [
+  "Des relevés réguliers sur les marchés, réalisés par des agents formés.",
+  "Une vérification avant diffusion : un prix aberrant n'est pas publié.",
+  "Une information simple, envoyée sur WhatsApp, en français clair.",
+  "Des alertes personnelles dès qu'un prix franchit le seuil que vous fixez.",
+];
 
-export default async function Page() {
-  const [live, overview] = await Promise.all([
-    getJson("/prices/current?product=MAIS&country=TGO"),
-    getJson("/stats/overview?product=MAIS&days=30"),
-  ]);
+const ETAPES = [
+  ["Relevé", "Nos agents notent les prix pratiqués, marché par marché, plusieurs fois par semaine."],
+  ["Vérification", "Les écarts importants sont contrôlés avant d'être publiés."],
+  ["Diffusion", "Les prix du jour, les tendances et vos alertes arrivent sur WhatsApp."],
+  ["Décision", "Vous vendez, achetez ou stockez au bon moment, avec un repère fiable."],
+];
 
-  const rawItems = live?.data?.length ? live.data : fallbackPrices("MAIS");
-  const items = rawItems.map((p) => ({
-    product: prettyProduct(p.product.name_fr),
-    market: prettyName(p.market.name_fr),
-    price: p.avg_price,
-    min: p.min_price,
-    max: p.max_price,
-    variation: p.variation_24h ?? 0,
-    count: p.sample_count,
-  }));
-  const ov = overview?.stats ? overview : fallbackOverview("MAIS", 30);
-  const stats = ov.stats || {};
-  const lastDate = ov.series?.length ? ov.series[ov.series.length - 1].date : null;
+const SERVICES = [
+  {
+    icon: "chart",
+    titre: "Prix du jour",
+    texte: "Le cours moyen par marché, avec le minimum et le maximum observés.",
+    href: "/prix",
+    lien: "Voir les prix",
+  },
+  {
+    icon: "map",
+    titre: "Carte des marchés",
+    texte: "Les prix région par région, sur une carte interactive du Togo.",
+    href: "/carte",
+    lien: "Ouvrir la carte",
+  },
+  {
+    icon: "bell",
+    titre: "Alertes",
+    texte: "Un seuil, un message : vous êtes prévenu sans avoir à vérifier.",
+    href: "/alertes",
+    lien: "Créer une alerte",
+  },
+  {
+    icon: "bolt",
+    titre: "Tendances",
+    texte: "L'évolution sur trente jours et une projection à sept jours.",
+    href: "/prix",
+    lien: "Voir les tendances",
+  },
+  {
+    icon: "market",
+    titre: "Annonces",
+    texte: "Des offres entre producteurs, commerçants et coopératives.",
+    href: "/marketplace",
+    lien: "Parcourir les annonces",
+  },
+  {
+    icon: "user",
+    titre: "Votre espace",
+    texte: "Vos alertes, votre abonnement et vos annonces au même endroit.",
+    href: "/login",
+    lien: "Se connecter",
+  },
+];
 
+const POUR_QUI = [
+  ["Producteur", "Savoir quand vendre, sans dépendre du premier acheteur venu."],
+  ["Commerçant", "Comparer les marchés et acheter au juste prix."],
+  ["Coopérative", "Suivre les cours et publier les offres de ses membres."],
+  ["Organisation", "Disposer d'un observatoire simple des prix agricoles."],
+];
+
+const ENGAGEMENTS = [
+  ["En français simple", "Pas de jargon : des prix, des marchés, des conseils utilisables."],
+  ["Sans application", "Un téléphone suffit. WhatsApp reste le canal principal."],
+  ["Des données locales", "Des relevés faits au Togo, pour les réalités du terrain."],
+];
+
+export default function AccueilPage() {
   return (
     <>
-      <section className="hero">
-        <span className="kicker"><Icon name="bolt" size={14} /> Togo · temps réel</span>
-        <h1>L&apos;intelligence des marchés agricoles africains</h1>
-        <p>Prix du maïs, du soja et de la tomate sur plus de 15 marchés togolais — livrés sur WhatsApp en 3 secondes. Sans application à installer.</p>
+      <section className="hero lp-hero">
+        <span className="kicker"><Icon name="leaf" size={14} /> Togo · marchés agricoles</span>
+        <h1>Savoir le vrai prix, avant de vendre.</h1>
+        <p>
+          AgroPulse Africa met les prix des marchés agricoles togolais à la portée de tous.
+          Un message suffit pour connaître la valeur d&apos;un sac de maïs, de soja ou de
+          tomate — et décider en connaissance de cause.
+        </p>
         <div className="cta-row">
-          <a className="btn btn-primary" href="https://wa.me/22800000000?text=BONJOUR">Commencer sur WhatsApp <Icon name="arrow" size={17} /></a>
-          <a className="btn btn-ghost" href="/tarifs">Voir les tarifs</a>
+          <a className="btn btn-primary" href="/prix">Voir les prix du jour <Icon name="arrow" size={17} /></a>
+          <a className="btn btn-ghost" href="#projet">Comprendre le projet</a>
         </div>
       </section>
 
-      <div className="kpi" aria-label="Chiffres clés">
-        <div><b>{stats.days || 30}</b> <span className="muted">jours d&apos;historique</span></div>
-        <div><b>{new Set(items.map((i) => i.market)).size}</b> <span className="muted">marchés suivis</span></div>
-        <div><b>{stats.samples || "—"}</b> <span className="muted">relevés analysés</span></div>
-        <div>
-          <b className={stats.change_pct >= 0 ? "up-text" : "down-text"}>
-            {stats.change_pct > 0 ? "+" : ""}{stats.change_pct ?? 0}%
-          </b>{" "}
-          <span className="muted">maïs sur 30 j</span>
+      <div className="kpi" aria-label="Le projet en chiffres">
+        {CHIFFRES.map(([valeur, libelle]) => (
+          <div key={libelle}><b>{valeur}</b> <span className="muted">{libelle}</span></div>
+        ))}
+      </div>
+
+      <section className="lp-section" id="projet">
+        <div className="lp-eyebrow">Le constat</div>
+        <h2 className="lp-title">Vendre sans savoir le prix, c&apos;est perdre de l&apos;argent.</h2>
+        <p className="lp-lead">
+          Au Togo, la plupart des producteurs apprennent le cours du marché après avoir vendu.
+          L&apos;information existe, mais elle circule entre quelques personnes, au mauvais moment.
+        </p>
+        <div className="grid grid-3">
+          {CONSTAT.map((c) => (
+            <div className="card" key={c.titre}>
+              <h3><Icon name={c.icon} size={17} /> {c.titre}</h3>
+              <p className="muted" style={{ margin: "6px 0 0" }}>{c.texte}</p>
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-2" style={{ marginBottom: 14 }}>
-        <section className="panel">
-          <h2>
-            <Icon name="chart" size={18} /> Maïs — 30 jours
-            {ov.meta?.demo && <span className="badge stable" style={{ marginLeft: "auto" }}>démonstration</span>}
-          </h2>
-          <PriceChart data={ov.series || []} forecast={ov.forecast || []} height={270} unit="FCFA/kg" />
-          <div className="chart-caption">
-            <span><i className="dot forest" /> Prix moyen journalier</span>
-            <span><i className="dot gold" /> Moyenne mobile 7 j</span>
-            <span><i className="dot blue" /> Projection 7 j</span>
+      <section className="lp-section">
+        <div className="lp-split">
+          <div>
+            <div className="lp-eyebrow">Notre réponse</div>
+            <h2 className="lp-title">Une information fiable, au moment où elle sert.</h2>
+            <p className="lp-lead">
+              Nous suivons les marchés agricoles du pays et transformons ces relevés en
+              informations claires : un prix, un lieu, une date, une tendance.
+            </p>
+            <ul className="lp-list">
+              {REPONSE.map((r) => (
+                <li className="lp-item" key={r}>
+                  <span className="lp-item-ic"><Icon name="check" size={15} /></span>
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ul>
+            <p style={{ marginTop: 16 }}>
+              <a className="btn btn-forest" href="/prix">Explorer les prix</a>
+            </p>
           </div>
-        </section>
-        <StatsPanel
-          stats={stats}
-          histogram={ov.histogram || []}
-          markets={ov.markets || []}
-          cheapest={ov.cheapest}
-          expensive={ov.expensive}
-          arbitrage={ov.arbitrage}
-          spread_pct={ov.spread_pct}
-          title="Maïs — indicateurs clés"
-          compact
-        />
-      </div>
+          <figure className="lp-figure">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://images.unsplash.com/photo-1500937386664-56d1dfef3854?q=80&w=1200&auto=format&fit=crop"
+              alt="Parcelle agricole cultivée au Togo"
+              loading="lazy"
+            />
+            <figcaption>
+              Des prix relevés sur les marchés de Lomé, Kara, Sokodé, Atakpamé, Kpalimé et Dapaong.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
 
-      <h2 style={{ fontSize: 19, display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon name="chart" /> Prix du jour{lastDate ? ` — ${fmtDate(lastDate)}` : ""}
-      </h2>
-      <p className="muted" style={{ marginTop: -6 }}>
-        Moyenne des 7 derniers jours par marché · minimum et maximum sur la période.
-      </p>
-      <MarketExplorer items={items} />
-
-      <div className="grid grid-2" style={{ marginTop: 14 }}>
-        <section className="panel">
-          <h2><Icon name="map" size={18} /> Carte 3D des marchés</h2>
-          <p className="muted">
-            Colonnes en relief, couleur par tension de marché, corridors commerciaux animés et fiche détaillée
-            par marché. Valeurs moyennes sur 30 jours.
-          </p>
-          <div className="top-markets">
-            {(ov.markets || []).slice(0, 3).map((m) => (
-              <div className="top-market" key={m.market_id}>
-                <span>{prettyName(m.market)}</span>
-                <b>{m.avg_price} F/kg</b>
-                <span className={m.change_pct >= 0 ? "up-text" : "down-text"}>
-                  {m.change_pct > 0 ? "+" : ""}{m.change_pct}%
-                </span>
+      <section className="lp-section">
+        <div className="lp-eyebrow">Comment ça marche</div>
+        <h2 className="lp-title">Du marché jusqu&apos;à votre téléphone.</h2>
+        <div className="grid grid-2">
+          {ETAPES.map(([titre, texte], i) => (
+            <div className="lp-step" key={titre}>
+              <span className="lp-step-n">{i + 1}</span>
+              <div>
+                <b>{titre}</b>
+                <div className="muted">{texte}</div>
               </div>
-            ))}
-          </div>
-          <p><a className="btn btn-ghost dark" href="/carte">Ouvrir la carte interactive</a></p>
-        </section>
-        <section className="panel">
-          <h2><Icon name="bell" size={18} /> Alertes actives</h2>
-          <AlertsPreview />
-        </section>
-      </div>
-
-      <section className="panel" style={{ marginTop: 14 }}>
-        <h2><Icon name="leaf" size={18} /> Comment ça marche</h2>
-        <div className="muted">1. Nos agents relèvent les prix sur les marchés · 2. L&apos;IA valide et prévoit · 3. Vous recevez prix et alertes sur WhatsApp · 4. Vous vendez au bon prix — revenu estimé +15 à 25%.</div>
-        <p><span className="badge stable">WhatsApp-first</span> <span className="badge stable">Français, éwé, kabyè</span> <span className="badge stable">Flooz / T-Money</span></p>
+            </div>
+          ))}
+        </div>
       </section>
+
+      <section className="lp-section">
+        <div className="lp-eyebrow">Ce que vous trouvez ici</div>
+        <h2 className="lp-title">Six outils, une même question : combien ça vaut ?</h2>
+        <div className="grid grid-3">
+          {SERVICES.map((s) => (
+            <div className="card lp-service" key={s.titre}>
+              <h3><Icon name={s.icon} size={17} /> {s.titre}</h3>
+              <p className="muted" style={{ margin: "6px 0 12px" }}>{s.texte}</p>
+              <a href={s.href}>{s.lien} <Icon name="arrow" size={14} /></a>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="lp-section">
+        <div className="lp-eyebrow">Pour qui</div>
+        <h2 className="lp-title">Ceux qui vivent de l&apos;agriculture.</h2>
+        <div className="grid grid-2">
+          {POUR_QUI.map(([titre, texte]) => (
+            <div className="panel lp-person" key={titre}>
+              <b>{titre}</b>
+              <div className="muted">{texte}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="lp-section">
+        <div className="lp-eyebrow">Nos engagements</div>
+        <h2 className="lp-title">Simple, utile, ancré au terrain.</h2>
+        <div className="grid grid-3">
+          {ENGAGEMENTS.map(([titre, texte]) => (
+            <div className="panel" key={titre}>
+              <b><Icon name="check" size={15} /> {titre}</b>
+              <div className="muted" style={{ marginTop: 4 }}>{texte}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="lp-cta lp-section">
+        <h2>Commencez par un prix.</h2>
+        <p>
+          Ouvrez les prix du jour, ou créez un accès pour recevoir vos alertes dès qu&apos;un
+          seuil est atteint.
+        </p>
+        <div className="cta-row">
+          <a className="btn btn-primary" href="/prix">Voir les prix du jour</a>
+          <a className="btn btn-ghost" href="/login">Créer mon accès</a>
+        </div>
+      </section>
+
+      <p className="lp-note">
+        Version de démonstration : les prix affichés sur ce site sont des données de
+        démonstration, le temps que le réseau d&apos;agents et l&apos;envoi WhatsApp soient
+        pleinement opérationnels. AgroPulse Africa est un projet togolais.
+      </p>
+
+      <footer className="lp-footer">
+        <div className="lp-footer-brand">
+          <span className="logo"><Icon name="leaf" size={17} /></span>
+          <b>AgroPulse Africa</b>
+          <span className="muted">Lomé, Togo</span>
+        </div>
+        <nav className="lp-footer-links" aria-label="Liens de pied de page">
+          <a href="/prix">Prix du jour</a>
+          <a href="/carte">Carte</a>
+          <a href="/alertes">Alertes</a>
+          <a href="/marketplace">Annonces</a>
+          <a href="/login">Connexion</a>
+        </nav>
+        <div className="muted tiny">Un projet togolais d&apos;information sur les marchés agricoles.</div>
+      </footer>
     </>
   );
 }

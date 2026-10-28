@@ -19,7 +19,7 @@ Tout le reste peut être testé dès maintenant.
 | Indicateur | Valeur |
 |---|---|
 | Endpoints API | 32 |
-| Pages web | 8 |
+| Pages web | 9 |
 | Tables PostgreSQL | 18 |
 | Tests backend | 16 (tous verts) |
 | Tests E2E authentification | 13/13 |
@@ -38,7 +38,7 @@ Tout le reste peut être testé dès maintenant.
 | Base de données | Neon (PostgreSQL 15, région Europe) |
 | Cache | Upstash Redis (optionnel, repli mémoire automatique) |
 
-**État du déploiement :** le site public et l'API tournent sur la version 1.3.0 (analytique détaillée, carte 3D, graphiques, modération, saisie terrain et marketplace reliés à l'API, accès démonstration). Vérification effectuée le 28 octobre 2026 : `/health` renvoie `1.3.0`, les huit pages répondent en 200, la carte affiche les tuiles réelles et les colonnes de prix.
+**État du déploiement :** le site public et l'API tournent sur la version 1.3.0 (page de présentation, tableau de bord, analytique détaillée, carte 3D, graphiques, modération, saisie terrain et marketplace reliés à l'API, accès démonstration). Vérification effectuée le 28 octobre 2026 : `/health` renvoie `1.3.0`, les neuf pages répondent en 200, la carte affiche les tuiles réelles et les colonnes de prix.
 
 **Accès démonstration :** la page `/login` propose quatre profils de test (agriculteur, coopérative, agent terrain, administrateur) qui ouvrent une session sans SMS. Ces comptes (`+228 90 00 00 01` à `04`), leurs alertes, leurs annonces et un relevé en attente de modération sont créés automatiquement au démarrage. À couper avec `DEMO_LOGIN=0` avant une mise en service réelle.
 
@@ -102,11 +102,12 @@ Nouveau module `app/services/demo_data.py` :
 > Les lignes de démonstration sont marquées `source_type = 'synthetic'` et l'interface les étiquette « série de démonstration ». Le drapeau est calculé côté API (`meta.demo`, `meta.synthetic_share`) : il reste vrai tant que la majorité des relevés sont synthétiques, puis disparaît automatiquement quand les agents terrain alimentent la base. Pour les supprimer d'un coup :
 > `DELETE FROM price_records WHERE source_type = 'synthetic';`
 
-### 3.5 Site web — 8 pages
+### 3.5 Site web — 9 pages
 
 | Page | Contenu | État |
 |---|---|---|
-| `/` | Accueil immersif, KPI, graphique 30 jours, indicateurs, prix du jour, carte, alertes | Fonctionne |
+| `/` | Page de présentation du projet, sans contenu technique : constat, réponse, étapes, services, publics, engagements, appel à l'action | Fonctionne |
+| `/prix` | Tableau de bord : KPI, graphique 30 jours, indicateurs, prix du jour, comparaison des marchés, alertes | Fonctionne |
 | `/carte` | Carte interactive 3D + fiche marché + graphique + analyse | Fonctionne (nouveau) |
 | `/alertes` | Création, liste, suppression d'alertes réelles (API) | Fonctionne |
 | `/tarifs` | Quatre plans, comparatif, renvoi vers la connexion | Fonctionne (paiement en ligne non branché) |
@@ -151,7 +152,7 @@ Design : navbar en verre, hero avec image, 20 icônes SVG maison, **aucun emoji*
 
 - 16 tests `pytest` verts (MVP, sécurité, services).
 - 13 vérifications E2E d'authentification en local : inscription, doublon, OTP faux, endpoints protégés, rafraîchissement.
-- Vérification en production : inscription, doublon, OTP erroné, 401 attendus, 8 pages en 200.
+- Vérification en production : inscription, doublon, OTP erroné, 401 attendus, 9 pages en 200.
 
 ---
 
@@ -166,6 +167,13 @@ Itération du 28 octobre 2026 (en plus de l'analytique, des graphiques et de la 
 - Accueil : les alertes affichées proviennent désormais de l'API (`AlertsPreview`), plus de contenu figé.
 - `/regions` lit la table `regions` (repli sur trois régions si la base est vide).
 - Étiquette « démonstration » sur les annonces et rappel du caractère fictif des données.
+
+Itération du 28 octobre 2026 (seconde partie) :
+
+- nouvelle page d'accueil `/` : présentation du projet en langage courant (constat, réponse, étapes, six services, publics, engagements, pied de page), sans jargon ni détail technique ;
+- le tableau de bord déménage de `/` vers `/prix`, avec un nouvel intitulé et un encart « Comment ces prix sont obtenus » ;
+- barre de navigation basse désormais consciente de la page courante (`BottomNav`, composant client) : Accueil, Prix, Carte, Alertes, Marché ;
+- renvois mis à jour : en-tête, connexion, tarifs et boutons de la page de présentation pointent vers `/prix`.
 
 ---
 

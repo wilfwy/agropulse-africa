@@ -11,7 +11,7 @@ const DEMO_ROLES = [
 ];
 
 function linksFor(role) {
-  const links = [{ href: "/", label: "Prix du jour" }, { href: "/carte", label: "Carte" }];
+  const links = [{ href: "/prix", label: "Prix du jour" }, { href: "/carte", label: "Carte" }];
   if (role === "agent" || role === "admin") links.push({ href: "/agent", label: "Saisie prix" });
   if (role === "admin") links.push({ href: "/admin", label: "Modération" });
   if (role !== "farmer") links.push({ href: "/marketplace", label: "Marketplace" });
