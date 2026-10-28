@@ -188,10 +188,10 @@ def data_origin(session=None) -> dict:
 # se connecter ni tester la moderation, la saisie terrain ou la marketplace.
 # Ils sont crees au demarrage (idempotent) et accessibles via /auth/demo-login.
 DEMO_ACCOUNTS = {
-    "farmer": {"phone": "+22890000001", "name": "Akouvi Demo", "role": "farmer", "plan": "basic"},
-    "coop": {"phone": "+22890000002", "name": "Cooperative Demo", "role": "coop", "plan": "coop"},
-    "agent": {"phone": "+22890000003", "name": "Agent Demo", "role": "agent", "plan": "pro"},
-    "admin": {"phone": "+22890000004", "name": "Admin Demo", "role": "admin", "plan": "enterprise"},
+    "farmer": {"phone": "+22890000001", "name": "Akouvi Démo", "role": "farmer", "plan": "basic"},
+    "coop": {"phone": "+22890000002", "name": "Coopérative Démo", "role": "coop", "plan": "coop"},
+    "agent": {"phone": "+22890000003", "name": "Agent Démo", "role": "agent", "plan": "pro"},
+    "admin": {"phone": "+22890000004", "name": "Admin Démo", "role": "admin", "plan": "enterprise"},
 }
 DEMO_PHONES = {v["phone"] for v in DEMO_ACCOUNTS.values()}
 
@@ -264,9 +264,9 @@ def ensure_demo_accounts(db=None) -> dict:
         listings_added = 0
         coop = users["coop"]
         for code, qty, price, region_code, desc in (
-            ("MAIS", 2500, 235, "PLA", "Recolte 2026, sacs de 50 kg, enlevement Atakpame"),
-            ("SOJA", 1200, 310, "CEN", "Soja trie, lot homogene, disponible Sokode"),
-            ("TOMATE", 400, 425, "MAR", "Tomate fraiche, cueillette du matin, Lome"),
+            ("MAIS", 2500, 235, "PLA", "Récolte 2026, sacs de 50 kg, enlèvement à Atakpamé"),
+            ("SOJA", 1200, 310, "CEN", "Soja trié, lot homogène, disponible à Sokodé"),
+            ("TOMATE", 400, 425, "MAR", "Tomate fraîche, cueillette du matin, Lomé"),
         ):
             prod = products.get(code)
             reg = regions.get(region_code) or db.query(M.Region).first()
@@ -276,6 +276,9 @@ def ensure_demo_accounts(db=None) -> dict:
                 M.MarketplaceListing.seller_id == coop.id,
                 M.MarketplaceListing.product_id == prod.id).first()
             if exists:
+                exists.quantity, exists.price_per_unit = qty, price
+                exists.description, exists.region_id = desc, reg.id
+                exists.status = "active"
                 continue
             db.add(M.MarketplaceListing(seller_id=coop.id, product_id=prod.id,
                                         region_id=reg.id, quantity=qty, unit="kg",

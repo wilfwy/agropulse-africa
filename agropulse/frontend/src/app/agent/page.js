@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../components/icons";
 import { apiFetch, getToken, me } from "../../lib/api";
+import { prettyName, prettyProduct } from "../../lib/names";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 const QUEUE_KEY = "agropulse-price-queue";
@@ -108,13 +109,13 @@ export default function AgentPage() {
         <label>Marché
           <select value={form.market} onChange={(e) => setForm({ ...form, market: e.target.value })}>
             {markets.length === 0 && <option value="">Chargement…</option>}
-            {markets.map((m) => <option key={m.id} value={m.id}>{m.name_fr}</option>)}
+            {markets.map((m) => <option key={m.id} value={m.id}>{prettyName(m.name_fr)}</option>)}
           </select>
         </label>
         <label>Produit
           <select value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })}>
             {products.length === 0 && <option value="">Chargement…</option>}
-            {products.map((p) => <option key={p.code} value={p.code}>{p.name_fr}</option>)}
+            {products.map((p) => <option key={p.code} value={p.code}>{prettyProduct(p.name_fr)}</option>)}
           </select>
         </label>
         <div className="grid grid-2">

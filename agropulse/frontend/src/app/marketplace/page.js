@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../components/icons";
 import { apiFetch, getToken } from "../../lib/api";
+import { prettyProduct } from "../../lib/names";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -82,7 +83,7 @@ export default function MarketplacePage() {
         <label>Produit
           <select value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })}>
             {products.length === 0 && <option value="">Chargement…</option>}
-            {products.map((p) => <option key={p.code} value={p.code}>{p.name_fr}</option>)}
+            {products.map((p) => <option key={p.code} value={p.code}>{prettyProduct(p.name_fr)}</option>)}
           </select>
         </label>
         <label>Région
@@ -124,7 +125,7 @@ export default function MarketplacePage() {
       <div className="grid grid-2">
         {offers.map((o) => (
           <div className="card" key={o.id}>
-            <h3><Icon name="market" size={17} /> {o.quantity} {o.unit} — {o.product_name || o.product}
+            <h3><Icon name="market" size={17} /> {o.quantity} {o.unit} — {prettyProduct(o.product_name || o.product) || o.product}
               {o.demo && <span className="badge stable" style={{ marginLeft: 8 }}>démonstration</span>}
             </h3>
             <div className="price">{o.price_per_unit} F/kg</div>

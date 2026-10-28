@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../components/icons";
 import { apiFetch, getToken } from "../../lib/api";
+import { prettyName, prettyProduct } from "../../lib/names";
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -87,8 +88,8 @@ export default function AdminPage() {
               return (
                 <tr key={p.id}>
                   <td>{fmtDate(p.recorded_at)}</td>
-                  <td>{p.market}</td>
-                  <td>{p.product}</td>
+                  <td>{prettyName(p.market)}</td>
+                  <td>{prettyProduct(p.product)}</td>
                   <td><b>{p.price}</b> F/kg</td>
                   <td>
                     <span className={`badge ${Math.abs(dev) > 30 ? "down" : "stable"}`}>
