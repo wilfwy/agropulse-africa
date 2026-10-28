@@ -182,7 +182,9 @@ export default function PriceChart({
           </linearGradient>
         </defs>
 
-        {ticks.map((t) => (
+        {ticks
+          .filter((t) => y(t) >= PAD.t + 4 && y(t) <= PAD.t + plotH)
+          .map((t) => (
           <g key={t}>
             <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="#e6ebe6" strokeDasharray="3 5" />
             <text x={PAD.l - 8} y={y(t) + 3.5} textAnchor="end" fontSize="10.5" fill="#7C8B80">
