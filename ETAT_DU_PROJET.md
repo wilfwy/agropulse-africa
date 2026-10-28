@@ -38,7 +38,7 @@ Tout le reste peut être testé dès maintenant.
 | Base de données | Neon (PostgreSQL 15, région Europe) |
 | Cache | Upstash Redis (optionnel, repli mémoire automatique) |
 
-**Important :** le site public tourne encore sur la version précédente du frontend. Les nouveautés décrites aux sections 3.6 et 3.7 sont dans le dépôt mais **pas encore déployées**. Voir section 6.
+**État du déploiement :** le site public et l'API tournent sur la version 1.2.0 (analytique détaillée, nouvelle carte 3D, nouveaux graphiques). Vérification effectuée le 28 octobre 2026 : `/health` renvoie `1.2.0`, les huit pages répondent en 200, la carte affiche les tuiles réelles et les colonnes de prix.
 
 ---
 
@@ -53,7 +53,7 @@ Tout le reste peut être testé dès maintenant.
 | Santé | `GET /health` (+ `?detail=1` : tables, colonnes manquantes, dernière erreur) | Fonctionne |
 | Authentification | `POST /auth/register`, `/auth/login`, `/auth/refresh` | Fonctionne |
 | Prix | `GET /prices/current`, `/prices/trend`, `/prices/history`, `/prices/forecasts`, `/prices/convert`, `POST /prices` | Fonctionne |
-| Analyse | `GET /stats/overview` | Nouveau, fonctionne en local |
+| Analyse | `GET /stats/overview` | Fonctionne (production) |
 | Référentiel | `GET /markets`, `/markets/geo`, `/products`, `/regions` | Fonctionne |
 | Alertes | `POST /alerts`, `GET /alerts`, `DELETE /alerts/{id}` | Fonctionne (cloisonné par utilisateur) |
 | Administration | `GET /admin/prices/pending`, `POST /admin/prices/{id}/approve`, `/reject`, `GET /admin/tasks/check-alerts` | Fonctionne |
@@ -172,12 +172,10 @@ Design : navbar en verre, hero avec image, 20 icônes SVG maison, **aucun emoji*
 
 | # | Tâche | Détail |
 |---|---|---|
-| 1 | Déployer le backend | Les endpoints d'analyse ne sont pas encore en production (Render reconstruit à chaque `git push`) |
-| 2 | Déployer le frontend | Le site public affiche l'ancienne version |
-| 3 | Variables d'environnement Render | `JWT_PRIVATE_KEY`, `PII_HASH_SECRET`, `DEBUG_OTP_KEY`, `REDIS_URL` (voir section 6) |
-| 4 | Passerelle SMS réelle | Africa's Talking ou agrégateur Moov/Togocom : sans elle, aucun utilisateur ne reçoit son code |
-| 5 | Envoi WhatsApp réel | Appels Graph API (`POST /messages`), gabarits validés par Meta, service de notification et journal des envois |
-| 6 | Retirer `DEBUG_OTP_KEY` | Une fois les SMS opérationnels, supprimer la clé de débogage |
+| 1 | Variables d'environnement Render | `JWT_PRIVATE_KEY`, `PII_HASH_SECRET`, `DEBUG_OTP_KEY`, `REDIS_URL` (voir section 6) |
+| 2 | Passerelle SMS réelle | Africa's Talking ou agrégateur Moov/Togocom : sans elle, aucun utilisateur ne reçoit son code |
+| 3 | Envoi WhatsApp réel | Appels Graph API (`POST /messages`), gabarits validés par Meta, service de notification et journal des envois |
+| 4 | Retirer `DEBUG_OTP_KEY` | Une fois les SMS opérationnels, supprimer la clé de débogage |
 
 ### P1 — Cœur produit
 
@@ -225,21 +223,21 @@ Les trois valeurs sont générées et stockées dans `agropulse/backend/keys/PRO
 
 Sans ces variables, l'inscription fonctionne mais **personne ne peut se connecter**.
 
-### 6.2 Déploiement des nouveautés
+### 6.2 Déploiement (déjà effectué le 28 octobre 2026)
 
 ```powershell
-# API
+# API : Render reconstruit automatiquement à chaque push sur main (environ 5 minutes)
 cd agropulse
 git add .
 git commit -m "Analytique detaillee et carte interactive 3D"
 git push origin main
 
-# Frontend
+# Frontend : déploiement manuel par CLI (le projet Vercel n'est pas relié à GitHub)
 cd frontend
-npx.cmd vercel --prod --scope wilfwys-projects
+npx.cmd vercel deploy --prod --scope wilfwys-projects
 ```
 
-Render reconstruit automatiquement à chaque `push` sur `main` (environ 5 minutes).
+Vérification de la version déployée : `GET /health` doit renvoyer `1.2.0`.
 
 ### 6.3 Vérification après déploiement
 
@@ -272,14 +270,13 @@ Attendu : une série d'environ 30 points, 6 marchés géolocalisés, un bloc d'a
 
 ## 8. Ordre recommandé pour la suite
 
-1. Déployer backend et frontend, vérifier les trois nouveaux endpoints.
-2. Saisir les variables d'environnement Render et tester une connexion complète avec `X-Debug-Key`.
-3. Brancher l'envoi WhatsApp (Graph API) : c'est la promesse centrale du produit.
-4. Brancher un opérateur SMS, puis retirer `DEBUG_OTP_KEY`.
-5. Persister la marketplace et les commissions.
-6. Brancher les pages admin et agent sur l'API.
-7. Ajouter les paiements Flooz / T-Money.
-8. Passer à un modèle de prévision saisonnier et à Alembic.
+1. Saisir les variables d'environnement Render et tester une connexion complète avec `X-Debug-Key`.
+2. Brancher l'envoi WhatsApp (Graph API) : c'est la promesse centrale du produit.
+3. Brancher un opérateur SMS, puis retirer `DEBUG_OTP_KEY`.
+4. Persister la marketplace et les commissions.
+5. Brancher les pages admin et agent sur l'API.
+6. Ajouter les paiements Flooz / T-Money.
+7. Passer à un modèle de prévision saisonnier et à Alembic.
 
 ---
 

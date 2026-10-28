@@ -101,6 +101,9 @@ export default async function Page() {
       <h2 style={{ fontSize: 19, display: "flex", alignItems: "center", gap: 8 }}>
         <Icon name="chart" /> Prix du jour{lastDate ? ` — ${fmtDate(lastDate)}` : ""}
       </h2>
+      <p className="muted" style={{ marginTop: -6 }}>
+        Moyenne des 7 derniers jours par marché · minimum et maximum sur la période.
+      </p>
       <MarketExplorer items={items} />
 
       <div className="grid grid-2" style={{ marginTop: 14 }}>
@@ -108,7 +111,7 @@ export default async function Page() {
           <h2><Icon name="map" size={18} /> Carte 3D des marchés</h2>
           <p className="muted">
             Colonnes en relief, couleur par tension de marché, corridors commerciaux animés et fiche détaillée
-            par marché.
+            par marché. Valeurs moyennes sur 30 jours.
           </p>
           <div className="top-markets">
             {(ov.markets || []).slice(0, 3).map((m) => (
