@@ -8,7 +8,7 @@ import time
 from app.config import settings
 from app.dependencies import get_current_user, require_plan, require_admin, check_alert_quota
 
-app = FastAPI(title="AgroPulse Africa API", version="1.1.1")
+app = FastAPI(title="AgroPulse Africa API", version="1.2.0")
 
 # Derniere erreur non geree, exposée via /health?detail=1 pour diagnostic
 _LAST_ERROR = {}
