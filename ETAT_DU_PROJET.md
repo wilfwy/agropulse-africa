@@ -109,8 +109,8 @@ Nouveau module `app/services/demo_data.py` :
 | `/` | Accueil immersif, KPI, graphique 30 jours, indicateurs, prix du jour, carte, alertes | Fonctionne |
 | `/carte` | Carte interactive 3D + fiche marché + graphique + analyse | Fonctionne (nouveau) |
 | `/alertes` | Création, liste, suppression d'alertes réelles (API) | Fonctionne |
-| `/tarifs` | Quatre plans, comparatif | Fonctionne |
-| `/login` | Connexion par téléphone + OTP | Fonctionne (dépend des SMS) |
+| `/tarifs` | Quatre plans, comparatif, renvoi vers la connexion | Fonctionne (paiement en ligne non branché) |
+| `/login` | Connexion OTP + quatre profils de démonstration | Fonctionne (SMS réel non branché) |
 | `/marketplace` | Annonces réelles (lecture publique, publication authentifiée) | Fonctionne |
 | `/admin` | File de modération réelle : approuver / rejeter | Fonctionne (compte admin requis) |
 | `/agent` | Saisie terrain reliée à `POST /prices`, file locale de secours | Fonctionne (rôle agent requis) |
@@ -224,8 +224,9 @@ Les trois valeurs sont générées et stockées dans `agropulse/backend/keys/PRO
 | `PII_HASH_SECRET` | Hachage des numéros de téléphone |
 | `DEBUG_OTP_KEY` | Permet de récupérer l'OTP via l'en-tête `X-Debug-Key` en attendant les SMS |
 | `REDIS_URL` | Cache et rate limiting partagés (Upstash) |
+| `DEMO_LOGIN` | `1` (défaut) ouvre les profils de test depuis `/login` ; passer à `0` avant une mise en service réelle |
 
-Sans ces variables, l'inscription fonctionne mais **personne ne peut se connecter**.
+Sans ces variables, l'inscription fonctionne mais **personne ne peut se connecter**. En attendant, la page `/login` expose quatre profils de démonstration qui contournent l'OTP (voir section 2).
 
 ### 6.2 Déploiement (déjà effectué le 28 octobre 2026)
 
