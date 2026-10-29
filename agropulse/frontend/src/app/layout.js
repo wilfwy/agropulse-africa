@@ -5,6 +5,7 @@ export const metadata = { title: "AgroPulse Africa — Le vrai prix des marchés
 export const viewport = { width: "device-width", initialScale: 1, themeColor: "#2D6A4F" };
 export default function RootLayout({ children }) {
   return (<html lang="fr"><body>
+    <script dangerouslySetInnerHTML={{ __html: "try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window)document.documentElement.classList.add('fx')}catch(e){}" }} />
     <header className="topbar">
       <a className="brand" href="/" aria-label="AgroPulse Africa, accueil">
         <span className="logo"><Icon name="leaf" size={20} /></span>

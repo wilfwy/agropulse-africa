@@ -1,259 +1,167 @@
 import Icon from "../components/icons";
+import ScrollFX from "../components/ScrollFX";
 
 export const metadata = {
-  title: "AgroPulse Africa — Le vrai prix des marchés agricoles togolais",
+  title: "AgroPulse Africa — Le juste prix des marchés agricoles togolais",
   description:
-    "AgroPulse Africa aide les producteurs, commerçants et coopératives du Togo à connaître les prix des marchés agricoles et à recevoir des alertes sur WhatsApp.",
+    "Les prix des marchés agricoles togolais sur WhatsApp : producteurs, commerçants et coopératives savent quand vendre.",
 };
 
 const CHIFFRES = [
-  ["14", "marchés référencés"],
-  ["5", "régions couvertes"],
-  ["9", "filières suivies"],
-  ["0", "application à installer"],
+  ["14", "marchés"],
+  ["5", "régions"],
+  ["9", "filières"],
+  ["0", "application"],
 ];
 
-const CONSTAT = [
-  {
-    icon: "eye",
-    titre: "Le prix se devine",
-    texte:
-      "Loin du marché, on accepte le prix proposé. Sans repère, il est difficile de négocier.",
-  },
-  {
-    icon: "chart",
-    titre: "La marge s'évapore",
-    texte:
-      "L'écart entre le champ et l'étal profite à ceux qui détiennent l'information.",
-  },
-  {
-    icon: "market",
-    titre: "L'information est dispersée",
-    texte:
-      "Chaque marché a ses cours, chaque jour. Personne ne voit l'ensemble du pays.",
-  },
-];
-
-const REPONSE = [
-  "Des relevés réguliers sur les marchés, réalisés par des agents formés.",
-  "Une vérification avant diffusion : un prix aberrant n'est pas publié.",
-  "Une information simple, envoyée sur WhatsApp, en français clair.",
-  "Des alertes personnelles dès qu'un prix franchit le seuil que vous fixez.",
+const POINTS = [
+  ["Un prix par marché", "Le cours réel, pas une moyenne inventée."],
+  ["Une vérification", "Un relevé aberrant n'est pas publié."],
+  ["Une alerte", "Vous êtes prévenu quand le seuil bouge."],
 ];
 
 const ETAPES = [
-  ["Relevé", "Nos agents notent les prix pratiqués, marché par marché, plusieurs fois par semaine."],
-  ["Vérification", "Les écarts importants sont contrôlés avant d'être publiés."],
-  ["Diffusion", "Les prix du jour, les tendances et vos alertes arrivent sur WhatsApp."],
-  ["Décision", "Vous vendez, achetez ou stockez au bon moment, avec un repère fiable."],
+  ["01", "Relevé", "Des agents notent les prix sur place."],
+  ["02", "Vérification", "Les écarts sont contrôlés avant publication."],
+  ["03", "WhatsApp", "Vous recevez le prix et vos alertes."],
 ];
 
-const SERVICES = [
+const CARTES = [
   {
-    icon: "chart",
+    image: "/img/cereales.jpg",
+    alt: "Bol de céréales sur un étal de marché",
     titre: "Prix du jour",
-    texte: "Le cours moyen par marché, avec le minimum et le maximum observés.",
-    href: "/prix",
-    lien: "Voir les prix",
+    texte: "Le cours par marché, en un coup d'œil.",
+    lien: "/prix",
+    action: "Voir les prix",
   },
   {
-    icon: "map",
-    titre: "Carte des marchés",
-    texte: "Les prix région par région, sur une carte interactive du Togo.",
-    href: "/carte",
-    lien: "Ouvrir la carte",
+    image: "/img/route-togo.jpg",
+    alt: "Route de latérite dans une zone rurale du Togo",
+    titre: "Carte",
+    texte: "Les prix région par région.",
+    lien: "/carte",
+    action: "Ouvrir la carte",
   },
   {
-    icon: "bell",
+    image: "/img/mais.jpg",
+    alt: "Épis de maïs grillés sur un marché de Lomé",
     titre: "Alertes",
-    texte: "Un seuil, un message : vous êtes prévenu sans avoir à vérifier.",
-    href: "/alertes",
-    lien: "Créer une alerte",
+    texte: "Un seuil, un message.",
+    lien: "/alertes",
+    action: "Créer une alerte",
   },
   {
-    icon: "bolt",
-    titre: "Tendances",
-    texte: "L'évolution sur trente jours et une projection à sept jours.",
-    href: "/prix",
-    lien: "Voir les tendances",
-  },
-  {
-    icon: "market",
+    image: "/img/soja.jpg",
+    alt: "Graines de soja dans des bassines sur un marché",
     titre: "Annonces",
-    texte: "Des offres entre producteurs, commerçants et coopératives.",
-    href: "/marketplace",
-    lien: "Parcourir les annonces",
+    texte: "Acheter et vendre entre professionnels.",
+    lien: "/marketplace",
+    action: "Voir les annonces",
   },
-  {
-    icon: "user",
-    titre: "Votre espace",
-    texte: "Vos alertes, votre abonnement et vos annonces au même endroit.",
-    href: "/login",
-    lien: "Se connecter",
-  },
-];
-
-const POUR_QUI = [
-  ["Producteur", "Savoir quand vendre, sans dépendre du premier acheteur venu."],
-  ["Commerçant", "Comparer les marchés et acheter au juste prix."],
-  ["Coopérative", "Suivre les cours et publier les offres de ses membres."],
-  ["Organisation", "Disposer d'un observatoire simple des prix agricoles."],
-];
-
-const ENGAGEMENTS = [
-  ["En français simple", "Pas de jargon : des prix, des marchés, des conseils utilisables."],
-  ["Sans application", "Un téléphone suffit. WhatsApp reste le canal principal."],
-  ["Des données locales", "Des relevés faits au Togo, pour les réalités du terrain."],
 ];
 
 export default function AccueilPage() {
   return (
     <>
-      <section className="hero lp-hero">
-        <span className="kicker"><Icon name="leaf" size={14} /> Togo · marchés agricoles</span>
-        <h1>Savoir le vrai prix, avant de vendre.</h1>
-        <p>
-          AgroPulse Africa met les prix des marchés agricoles togolais à la portée de tous.
-          Un message suffit pour connaître la valeur d&apos;un sac de maïs, de soja ou de
-          tomate — et décider en connaissance de cause.
-        </p>
-        <div className="cta-row">
-          <a className="btn btn-primary" href="/prix">Voir les prix du jour <Icon name="arrow" size={17} /></a>
-          <a className="btn btn-ghost" href="#projet">Comprendre le projet</a>
-        </div>
-      </section>
+      <ScrollFX />
 
-      <div className="kpi" aria-label="Le projet en chiffres">
-        {CHIFFRES.map(([valeur, libelle]) => (
-          <div key={libelle}><b>{valeur}</b> <span className="muted">{libelle}</span></div>
-        ))}
-      </div>
-
-      <section className="lp-section" id="projet">
-        <div className="lp-eyebrow">Le constat</div>
-        <h2 className="lp-title">Vendre sans savoir le prix, c&apos;est perdre de l&apos;argent.</h2>
-        <p className="lp-lead">
-          Au Togo, la plupart des producteurs apprennent le cours du marché après avoir vendu.
-          L&apos;information existe, mais elle circule entre quelques personnes, au mauvais moment.
-        </p>
-        <div className="grid grid-3">
-          {CONSTAT.map((c) => (
-            <div className="card" key={c.titre}>
-              <h3><Icon name={c.icon} size={17} /> {c.titre}</h3>
-              <p className="muted" style={{ margin: "6px 0 0" }}>{c.texte}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="lp-section">
-        <div className="lp-split">
-          <div>
-            <div className="lp-eyebrow">Notre réponse</div>
-            <h2 className="lp-title">Une information fiable, au moment où elle sert.</h2>
-            <p className="lp-lead">
-              Nous suivons les marchés agricoles du pays et transformons ces relevés en
-              informations claires : un prix, un lieu, une date, une tendance.
-            </p>
-            <ul className="lp-list">
-              {REPONSE.map((r) => (
-                <li className="lp-item" key={r}>
-                  <span className="lp-item-ic"><Icon name="check" size={15} /></span>
-                  <span>{r}</span>
-                </li>
-              ))}
-            </ul>
-            <p style={{ marginTop: 16 }}>
-              <a className="btn btn-forest" href="/prix">Explorer les prix</a>
-            </p>
+      <section className="lp-hero">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="lp-hero-bg" src="/img/lome-marche.jpg" alt="" data-par="0.10" fetchPriority="high" />
+        <div className="lp-hero-inner">
+          <span className="lp-kicker"><Icon name="leaf" size={13} /> Togo · marchés agricoles</span>
+          <h1>Le juste prix,<br />au bon moment.</h1>
+          <p>Les prix des marchés agricoles togolais, sur WhatsApp. Sans application.</p>
+          <div className="lp-actions">
+            <a className="lp-btn lp-btn-gold" href="/prix">Voir les prix <Icon name="arrow" size={16} /></a>
+            <a className="lp-btn lp-btn-line" href="#projet">Découvrir</a>
           </div>
-          <figure className="lp-figure">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://images.unsplash.com/photo-1500937386664-56d1dfef3854?q=80&w=1200&auto=format&fit=crop"
-              alt="Parcelle agricole cultivée au Togo"
-              loading="lazy"
-            />
-            <figcaption>
-              Des prix relevés sur les marchés de Lomé, Kara, Sokodé, Atakpamé, Kpalimé et Dapaong.
-            </figcaption>
-          </figure>
         </div>
       </section>
 
-      <section className="lp-section">
-        <div className="lp-eyebrow">Comment ça marche</div>
-        <h2 className="lp-title">Du marché jusqu&apos;à votre téléphone.</h2>
-        <div className="grid grid-2">
-          {ETAPES.map(([titre, texte], i) => (
-            <div className="lp-step" key={titre}>
-              <span className="lp-step-n">{i + 1}</span>
-              <div>
+      <ul className="lp-stats" data-rv>
+        {CHIFFRES.map(([valeur, libelle]) => (
+          <li key={libelle}><b>{valeur}</b><span>{libelle}</span></li>
+        ))}
+      </ul>
+
+      <section className="lp-block lp-split" id="projet">
+        <div className="lp-copy" data-rv>
+          <span className="lp-eyebrow">Le constat</span>
+          <h2>Personne ne devrait vendre à l&apos;aveugle.</h2>
+          <p>Le cours se sait souvent trop tard. Nous le rendons visible avant la vente.</p>
+          <ul className="lp-points">
+            {POINTS.map(([titre, texte], i) => (
+              <li key={titre} data-rv style={{ "--d": `${120 + i * 90}ms` }}>
                 <b>{titre}</b>
-                <div className="muted">{texte}</div>
-              </div>
-            </div>
-          ))}
+                <span>{texte}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <figure className="lp-photo" data-rv style={{ "--d": "160ms" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/img/vendeuse.jpg" alt="Vendeuse sur un marché de Lomé" loading="lazy" />
+          <figcaption>Hédzranawoé, Lomé.</figcaption>
+        </figure>
+      </section>
+
+      <section className="lp-band">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/img/marche-vu.jpg" alt="" data-par="0.16" loading="lazy" />
+        <div>
+          <blockquote>Un prix vient du marché, jamais d&apos;une rumeur.</blockquote>
+          <small>Relevés à Lomé, Kara, Sokodé, Atakpamé, Kpalimé et Dapaong.</small>
         </div>
       </section>
 
-      <section className="lp-section">
-        <div className="lp-eyebrow">Ce que vous trouvez ici</div>
-        <h2 className="lp-title">Six outils, une même question : combien ça vaut ?</h2>
-        <div className="grid grid-3">
-          {SERVICES.map((s) => (
-            <div className="card lp-service" key={s.titre}>
-              <h3><Icon name={s.icon} size={17} /> {s.titre}</h3>
-              <p className="muted" style={{ margin: "6px 0 12px" }}>{s.texte}</p>
-              <a href={s.href}>{s.lien} <Icon name="arrow" size={14} /></a>
-            </div>
-          ))}
+      <section className="lp-block">
+        <div data-rv>
+          <span className="lp-eyebrow">Comment ça marche</span>
+          <h2>Trois étapes, aucun jargon.</h2>
         </div>
-      </section>
-
-      <section className="lp-section">
-        <div className="lp-eyebrow">Pour qui</div>
-        <h2 className="lp-title">Ceux qui vivent de l&apos;agriculture.</h2>
-        <div className="grid grid-2">
-          {POUR_QUI.map(([titre, texte]) => (
-            <div className="panel lp-person" key={titre}>
+        <ol className="lp-steps">
+          {ETAPES.map(([num, titre, texte], i) => (
+            <li key={num} data-rv style={{ "--d": `${i * 110}ms` }}>
+              <span>{num}</span>
               <b>{titre}</b>
-              <div className="muted">{texte}</div>
-            </div>
+              <p>{texte}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="lp-block">
+        <div data-rv>
+          <span className="lp-eyebrow">Ce que vous trouvez</span>
+          <h2>Quatre façons de savoir.</h2>
+        </div>
+        <div className="lp-cards">
+          {CARTES.map((carte, i) => (
+            <a className="lp-card" href={carte.lien} key={carte.titre} data-rv style={{ "--d": `${i * 90}ms` }}>
+              <figure>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={carte.image} alt={carte.alt} loading="lazy" />
+              </figure>
+              <div className="lp-card-body">
+                <b>{carte.titre}</b>
+                <span>{carte.texte}</span>
+                <em>{carte.action} <Icon name="arrow" size={13} /></em>
+              </div>
+            </a>
           ))}
         </div>
       </section>
 
-      <section className="lp-section">
-        <div className="lp-eyebrow">Nos engagements</div>
-        <h2 className="lp-title">Simple, utile, ancré au terrain.</h2>
-        <div className="grid grid-3">
-          {ENGAGEMENTS.map(([titre, texte]) => (
-            <div className="panel" key={titre}>
-              <b><Icon name="check" size={15} /> {titre}</b>
-              <div className="muted" style={{ marginTop: 4 }}>{texte}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="lp-cta lp-section">
+      <section className="lp-cta" data-rv>
         <h2>Commencez par un prix.</h2>
-        <p>
-          Ouvrez les prix du jour, ou créez un accès pour recevoir vos alertes dès qu&apos;un
-          seuil est atteint.
-        </p>
-        <div className="cta-row">
-          <a className="btn btn-primary" href="/prix">Voir les prix du jour</a>
-          <a className="btn btn-ghost" href="/login">Créer mon accès</a>
+        <p>Ouvrez les prix du jour, ou créez votre accès pour recevoir vos alertes.</p>
+        <div className="lp-actions">
+          <a className="lp-btn lp-btn-gold" href="/prix">Voir les prix du jour</a>
+          <a className="lp-btn lp-btn-line" href="/login">Créer mon accès</a>
         </div>
       </section>
-
-      <p className="lp-note">
-        Version de démonstration : les prix affichés sur ce site sont des données de
-        démonstration, le temps que le réseau d&apos;agents et l&apos;envoi WhatsApp soient
-        pleinement opérationnels. AgroPulse Africa est un projet togolais.
-      </p>
 
       <footer className="lp-footer">
         <div className="lp-footer-brand">
@@ -268,7 +176,19 @@ export default function AccueilPage() {
           <a href="/marketplace">Annonces</a>
           <a href="/login">Connexion</a>
         </nav>
-        <div className="muted tiny">Un projet togolais d&apos;information sur les marchés agricoles.</div>
+        <p className="lp-note">
+          Version de démonstration : les prix affichés sont fictifs, le temps que le réseau
+          d&apos;agents et l&apos;envoi WhatsApp soient opérationnels.
+        </p>
+        <p className="lp-credit">
+          Photos :{" "}
+          <a href="https://commons.wikimedia.org/wiki/File:Lom%C3%A9_Grand_March%C3%A9_with_the_Cath%C3%A9drale_du_Sacr%C3%A9_Coeur_(33592985581).jpg" target="_blank" rel="noreferrer">Dan Sloan</a> (CC BY-SA 2.0),{" "}
+          <a href="https://commons.wikimedia.org/wiki/File:Lom%C3%A9_Grand_Market_in_full_swing.jpg" target="_blank" rel="noreferrer">Francisco Anzola</a> (CC BY 2.0),{" "}
+          <a href="https://commons.wikimedia.org/wiki/File:Revendeuse_de_boissons_locales_au_march%C3%A9_de_H%C3%A9dzranawo%C3%A9_%C3%A0_Lom%C3%A9_(Togo)_01.jpg" target="_blank" rel="noreferrer">Akouete</a>,{" "}
+          <a href="https://commons.wikimedia.org/wiki/File:C%C3%A9r%C3%A9ales_au_Togo_04.jpg" target="_blank" rel="noreferrer">Bamouzou</a>,{" "}
+          <a href="https://commons.wikimedia.org/wiki/File:Zone_rurale_-_Bagb%C3%A9,_Togo.jpg" target="_blank" rel="noreferrer">Komavo</a>{" "}
+          (CC BY-SA 4.0), via Wikimedia Commons.
+        </p>
       </footer>
     </>
   );

@@ -106,7 +106,7 @@ Nouveau module `app/services/demo_data.py` :
 
 | Page | Contenu | État |
 |---|---|---|
-| `/` | Page de présentation du projet, sans contenu technique : constat, réponse, étapes, services, publics, engagements, appel à l'action | Fonctionne |
+| `/` | Page de présentation du projet, sans contenu technique : accroche, constat, réponses, étapes, services illustrés, CTA, pied de page | Fonctionne |
 | `/prix` | Tableau de bord : KPI, graphique 30 jours, indicateurs, prix du jour, comparaison des marchés, alertes | Fonctionne |
 | `/carte` | Carte interactive 3D + fiche marché + graphique + analyse | Fonctionne (nouveau) |
 | `/alertes` | Création, liste, suppression d'alertes réelles (API) | Fonctionne |
@@ -174,6 +174,9 @@ Itération du 28 octobre 2026 (seconde partie) :
 - le tableau de bord déménage de `/` vers `/prix`, avec un nouvel intitulé et un encart « Comment ces prix sont obtenus » ;
 - barre de navigation basse désormais consciente de la page courante (`BottomNav`, composant client) : Accueil, Prix, Carte, Alertes, Marché ;
 - renvois mis à jour : en-tête, connexion, tarifs et boutons de la page de présentation pointent vers `/prix`.
+- La page d'accueil est épurée : accroche courte (« Le juste prix, au bon moment. »), chiffres en une ligne, constat, bande photo avec citation, trois étapes, quatre cartes illustrées (prix, carte, alertes, annonces), CTA, pied de page.
+- Photos auto-hébergées dans `frontend/public/img/` (marché de Lomé, vendeuse, céréales, route rurale, maïs, soja) sous licence CC BY / CC BY-SA (Wikimedia Commons), crédits intégrés dans le pied de page.
+- ScrollFX : apparition progressive des blocs (`data-rv`) et parallaxe léger des photos (`data-par`), désactivé si `prefers-reduced-motion` est actif.
 
 ---
 
